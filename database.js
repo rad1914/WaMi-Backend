@@ -1,75 +1,92 @@
-// database.js
-
 import Database from 'better-sqlite3';
+import fs from 'fs';
 
-// Initialize the database in a file named 'chat.db'
+const mediaDir = './media';
+if (!fs.existsSync(mediaDir)) {
+    fs.mkdirSync(mediaDir, { recursive: true });
+}
+
 const db = new Database(process.env.SQLITE_PATH || './chat.db');
 
-// Create the 'messages' table if it doesn't exist
+// Add session_id for multi-user support
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id TEXT UNIQUE,
+    session_id TEXT NOT NULL,
     jid TEXT NOT NULL,
-    text TEXT NOT NULL,
+    text TEXT,
     isOutgoing INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'sent',
-    timestamp INTEGER NOT NULL
+    timestamp INTEGER NOT NULL,
+    participant TEXT,
+    media_url TEXT,
+    mimetype TEXT
   )
 `);
 
-// Create the 'chats' table to store a list of all conversations
+// Add session_id, unread_count, and make primary key composite
 db.exec(`
   CREATE TABLE IF NOT EXISTS chats (
-    jid TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL,
+    jid TEXT NOT NULL,
     name TEXT,
+    is_group INTEGER NOT NULL DEFAULT 0,
     last_message TEXT,
-    last_message_timestamp INTEGER
+    last_message_timestamp INTEGER,
+    unread_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (session_id, jid)
   )
 `);
-
-// --- Prepared Statements ---
 
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
-    (message_id, jid, text, isOutgoing, status, timestamp)
+    (message_id, session_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype)
   VALUES
-    (@message_id, @jid, @text, @isOutgoing, @status, @timestamp)
+    (@message_id, @session_id, @jid, @text, @isOutgoing, @status, @timestamp, @participant, @media_url, @mimetype)
 `);
 
 const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
+// Filter messages by session_id
 const getMessagesByJid = db.prepare(`
-  SELECT message_id, jid, text, isOutgoing, status, timestamp
+  SELECT message_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype
     FROM messages
-   WHERE jid = @jid
+   WHERE session_id = @session_id AND jid = @jid
 ORDER BY timestamp ASC
    LIMIT @limit
 `);
 
-// Insert or update a conversation entry in the 'chats' table
+// Update upsert logic for new schema and unread count
 const upsertChat = db.prepare(`
-    INSERT INTO chats (jid, name, last_message, last_message_timestamp)
-    VALUES (@jid, @name, @last_message, @last_message_timestamp)
-    ON CONFLICT(jid) DO UPDATE SET
-        name = excluded.name,
+    INSERT INTO chats (session_id, jid, name, is_group, last_message, last_message_timestamp, unread_count)
+    VALUES (@session_id, @jid, @name, @is_group, @last_message, @last_message_timestamp, @increment_unread)
+    ON CONFLICT(session_id, jid) DO UPDATE SET
+        name = COALESCE(excluded.name, name),
         last_message = excluded.last_message,
-        last_message_timestamp = excluded.last_message_timestamp
+        last_message_timestamp = excluded.last_message_timestamp,
+        unread_count = unread_count + excluded.unread_count
 `);
 
-// Get all conversations, ordered by the most recent message
+// Filter chats by session_id
 const getChats = db.prepare(`
-    SELECT jid, name, last_message, last_message_timestamp FROM chats
+    SELECT jid, name, is_group, last_message, last_message_timestamp, unread_count as unreadCount FROM chats
+    WHERE session_id = @session_id
     ORDER BY last_message_timestamp DESC
 `);
 
-// Export all database functions
+const resetChatUnreadCount = db.prepare(`
+    UPDATE chats SET unread_count = 0 WHERE session_id = @session_id AND jid = @jid
+`);
+
 export {
+    db,
     insertMessage,
     updateMessageStatus,
     getMessagesByJid,
     upsertChat,
-    getChats
+    getChats,
+    resetChatUnreadCount
 };

@@ -6,6 +6,7 @@
   "license": "MIT",
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.18",
+    "archiver": "^7.0.1",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
