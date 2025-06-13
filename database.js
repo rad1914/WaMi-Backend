@@ -1,14 +1,18 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
+import dotenv from 'dotenv';
 
-const mediaDir = './media';
+// Load environment variables
+dotenv.config();
+
+const mediaDir = process.env.MEDIA_DIR || './media';
 if (!fs.existsSync(mediaDir)) {
     fs.mkdirSync(mediaDir, { recursive: true });
 }
 
 const db = new Database(process.env.SQLITE_PATH || './chat.db');
 
-// Add session_id for multi-user support
+// Add session_id, and fields for quoted messages
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +25,10 @@ db.exec(`
     timestamp INTEGER NOT NULL,
     participant TEXT,
     media_url TEXT,
-    mimetype TEXT
+    mimetype TEXT,
+    -- Added fields for replies
+    quoted_message_id TEXT,
+    quoted_message_text TEXT
   )
 `);
 
@@ -39,27 +46,28 @@ db.exec(`
   )
 `);
 
+// Updated to include quoted message fields
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
-    (message_id, session_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype)
+    (message_id, session_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype, quoted_message_id, quoted_message_text)
   VALUES
-    (@message_id, @session_id, @jid, @text, @isOutgoing, @status, @timestamp, @participant, @media_url, @mimetype)
+    (@message_id, @session_id, @jid, @text, @isOutgoing, @status, @timestamp, @participant, @media_url, @mimetype, @quoted_message_id, @quoted_message_text)
 `);
 
 const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
-// Filter messages by session_id
+// Updated to select new quoted message fields
 const getMessagesByJid = db.prepare(`
-  SELECT message_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype
+  SELECT message_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype, quoted_message_id, quoted_message_text
     FROM messages
    WHERE session_id = @session_id AND jid = @jid
 ORDER BY timestamp ASC
    LIMIT @limit
 `);
 
-// Update upsert logic for new schema and unread count
+// This is perfectly implemented for atomic updates. No changes needed.
 const upsertChat = db.prepare(`
     INSERT INTO chats (session_id, jid, name, is_group, last_message, last_message_timestamp, unread_count)
     VALUES (@session_id, @jid, @name, @is_group, @last_message, @last_message_timestamp, @increment_unread)
@@ -70,7 +78,6 @@ const upsertChat = db.prepare(`
         unread_count = unread_count + excluded.unread_count
 `);
 
-// Filter chats by session_id
 const getChats = db.prepare(`
     SELECT jid, name, is_group, last_message, last_message_timestamp, unread_count as unreadCount FROM chats
     WHERE session_id = @session_id
