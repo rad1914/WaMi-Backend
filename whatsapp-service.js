@@ -1,4 +1,4 @@
-// whatsapp-service.js
+// @path: whatsapp-service.js
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -25,10 +25,6 @@ dotenv.config();
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 const MEDIA_DIR   = process.env.MEDIA_DIR   || './media';
 
-/**
- * Normalize and validate a WhatsApp JID.
- * Returns a normalized JID string, or null if invalid.
- */
 export const normalizeJid = (input) => {
   if (!input) return null;
   try {
@@ -46,12 +42,6 @@ const getType = m =>
   ['reaction', 'sticker', 'image', 'video', 'audio', 'document', 'location', 'contact', 'extendedText', 'conversation']
     .find(type => m?.[`${type}Message`] || (type === 'conversation' && m?.conversation));
 
-/**
- * Create and manage a WhatsApp session via Baileys.
- * - Emits QR codes to session.latestQR
- * - Auto-reconnects on non-logout disconnects
- * - Downloads media into MEDIA_DIR/{session.id}
- */
 export async function createWhatsappSession(session, onLogout) {
   const { version } = await fetchLatestBaileysVersion();
   const authPath = path.join(SESSIONS_DIR, session.id);
@@ -91,11 +81,13 @@ export async function createWhatsappSession(session, onLogout) {
   sock.ev.on('messages.upsert', async ({ messages }) => {
     for (const m of messages) {
       if (!m.message) continue;
-      const type    = getType(m.message);
-      const content = m.message[`${type}Message`] || m.message;
-      const text    = getText(m.message) || '';
-      const ts      = Number(m.messageTimestamp) * 1000;
-      const { id, remoteJid, fromMe, participant } = m.key;
+      const type     = getType(m.message);
+      const content  = m.message[`${type}Message`] || m.message;
+      const text     = getText(m.message) || '';
+      const ts       = Number(m.messageTimestamp) * 1000;
+      const fromMe   = m.key.fromMe || false;
+      const { id, remoteJid, participant } = m.key;
+      const senderName = m.pushName || null; // ADDED: Capture sender's name.
 
       let media_url = null, mimetype = null;
       if (['image', 'video', 'audio', 'document'].includes(type)) {
@@ -112,7 +104,11 @@ export async function createWhatsappSession(session, onLogout) {
           media_url = `/media/${session.id}/${file}`;
         } catch { /* ignore download errors */ }
       }
+      
+      const quotedMessageId = content?.contextInfo?.stanzaId || null;
+      const quotedMessageText = getText(content?.contextInfo?.quotedMessage) || null;
 
+      // MODIFIED: Added sender_name to the database insert operation.
       insertMessage.run({
         message_id: id,
         session_id: session.id,
@@ -122,25 +118,36 @@ export async function createWhatsappSession(session, onLogout) {
         status: fromMe ? 'sent' : 'received',
         timestamp: ts,
         participant: fromMe ? null : participant,
+        sender_name: senderName, // ADDED
         media_url,
         mimetype,
-        quoted_message_id: content?.contextInfo?.stanzaId || null,
-        quoted_message_text: getText(content?.contextInfo?.quotedMessage) || null
+        quoted_message_id: quotedMessageId,
+        quoted_message_text: quotedMessageText
       });
 
       upsertChat.run({
         session_id: session.id,
         jid: remoteJid,
-        name: m.pushName || remoteJid.split('@')[0],
+        name: senderName || remoteJid.split('@')[0],
         is_group: isGroup(remoteJid) ? 1 : 0,
         last_message: text || type,
         last_message_timestamp: ts,
         increment_unread: fromMe ? 0 : 1
       });
 
+      // MODIFIED: The socket payload now mirrors the full message structure.
       session.io.emit('whatsapp-message', [{
-        id, jid: remoteJid, text, timestamp: ts, fromMe,
-        media_url, mimetype
+        id: id,
+        jid: remoteJid,
+        text: text,
+        isOutgoing: fromMe ? 1 : 0,
+        status: fromMe ? 'sent' : 'received',
+        timestamp: ts,
+        name: senderName,
+        media_url: media_url,
+        mimetype: mimetype,
+        quoted_message_id: quotedMessageId,
+        quoted_message_text: quotedMessageText,
       }]);
     }
   });

@@ -1,4 +1,4 @@
-// index.js (Endpoint)
+// @path: index.js
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -101,9 +101,28 @@ app.post('/session/import', authMiddleware, upload.single('sessionFile'), async 
   }
 });
 
-app.get('/chats', authMiddleware, (req, res) => {
-  try { res.json(getChats.all({ session_id: req.session.id })); }
-  catch { res.status(500).json({ error: 'Fetch failed' }); }
+// MODIFIED: The /chats endpoint now fetches and includes the avatar URL for each contact.
+app.get('/chats', authMiddleware, async (req, res) => {
+  try {
+    const chats = getChats.all({ session_id: req.session.id });
+    const chatsWithAvatars = await Promise.all(
+      chats.map(async (chat) => {
+        let avatarUrl = null;
+        if (req.session.sock) {
+          try {
+            avatarUrl = await req.session.sock.profilePictureUrl(chat.jid, 'image');
+          } catch (e) {
+            // Fails if no avatar is set, which is fine.
+          }
+        }
+        return { ...chat, avatarUrl };
+      })
+    );
+    res.json(chatsWithAvatars);
+  } catch (e) {
+    logger.error(`[${req.session.id}] /chats failed:`, e);
+    res.status(500).json({ error: 'Fetch failed' });
+  }
 });
 
 app.get('/history/:jid', authMiddleware, (req, res) => {
