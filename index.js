@@ -1,3 +1,4 @@
+// index.js (Endpoint) 
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -85,6 +86,9 @@ async function createWhatsappSession(session) {
     browser: Browsers.macOS('Desktop'),
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
     emitOwnEvents: true,
+    // NOTE: This getMessage implementation might be insufficient. Baileys expects a full
+    // proto.IWebMessageInfo object, but we are only storing parsed data. This may
+    // affect features like message replies in some edge cases.
     getMessage: async (key) => (await getMessagesByJid.get({ message_id: key.id, session_id: session.id }))?.message || undefined
   });
 
@@ -195,7 +199,8 @@ async function createWhatsappSession(session) {
             increment_unread: isOutgoing ? 0 : 1
         });
         
-        const socketMsg = { id, jid: remoteJid, text, timestamp, fromMe: isOutgoing, participant, media_url, mimetype, quoted_message_id, quoted_message_text };
+        // ALIGNED: Added pushName to the socket payload for the frontend
+        const socketMsg = { id, jid: remoteJid, text, timestamp, fromMe: isOutgoing, participant, media_url, mimetype, quoted_message_id, quoted_message_text, pushName: msg.pushName };
         session.io.emit('whatsapp-message', [socketMsg]);
     }
   });
@@ -352,8 +357,9 @@ app.get('/history/:jid', commonAuthMiddleware, (req, res) => {
   resetChatUnreadCount.run({ session_id: req.session.id, jid: fullJid });
   try {
     const limit = req.query.limit || 200;
+    // The query in database.js is already updated to alias message_id as id.
     const rows = getMessagesByJid.all({ session_id: req.session.id, jid: fullJid, limit });
-    res.json(rows.map(r => ({ ...r, id: r.message_id })));
+    res.json(rows);
   } catch (err) {
     logger.error('History fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch history' });

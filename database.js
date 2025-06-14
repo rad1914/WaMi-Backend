@@ -1,3 +1,4 @@
+// database.js (Endpoint) 
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -58,9 +59,9 @@ const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
-// Updated to select new quoted message fields
+// ALIGNED: Aliased message_id as id to match frontend expectation directly.
 const getMessagesByJid = db.prepare(`
-  SELECT message_id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype, quoted_message_id, quoted_message_text
+  SELECT message_id as id, jid, text, isOutgoing, status, timestamp, participant, media_url, mimetype, quoted_message_id, quoted_message_text
     FROM messages
    WHERE session_id = @session_id AND jid = @jid
 ORDER BY timestamp ASC
