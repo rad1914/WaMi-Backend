@@ -1,1 +1,4 @@
 node_modules/
+media
+auth
+auth_sessions

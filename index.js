@@ -164,16 +164,28 @@ app.post('/send/media',
 
 function restoreSessions() {
   try {
-    for (const id of fs.readdirSync(SESSIONS_DIR)) {
+    const sessionFolders = fs.readdirSync(SESSIONS_DIR);
+    logger.info(`Found ${sessionFolders.length} session(s) to restore.`);
+
+    for (const id of sessionFolders) {
       const sessionPath = path.join(SESSIONS_DIR, id);
       if (fs.statSync(sessionPath).isDirectory()) {
+        logger.info(`Restoring session: ${id}`);
         const session = { id, sock: null, isAuthenticated: false, latestQR: null, io: io.to(id) };
         sessions.set(id, session);
-        createWhatsappSession(session, () => sessions.delete(id));
+        createWhatsappSession(session, () => {
+          logger.info(`Session ${id} was logged out and removed.`);
+          fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true });
+          sessions.delete(id);
+        });
       }
     }
   } catch (e) {
-    logger.error('Startup restore failed:', e);
+    if (e.code === 'ENOENT') {
+      logger.info('Sessions directory not found, skipping restore.');
+    } else {
+      logger.error('Startup restore failed:', e);
+    }
   }
 }
 

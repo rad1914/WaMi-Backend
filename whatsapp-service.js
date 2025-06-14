@@ -14,7 +14,6 @@ import qr from 'qrcode';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
-import axios from 'axios';
 import {
   insertMessage,
   upsertChat,
@@ -74,32 +73,10 @@ export async function createWhatsappSession(session, onLogout) {
     if (qrCode) {
       session.latestQR = await qr.toDataURL(qrCode);
     }
-
     if (connection === 'open') {
       session.isAuthenticated = true;
       session.latestQR = null;
-
-      // —— download target profile picture on startup ——
-      const targetJid = normalizeJid('+5215539985884');
-      if (targetJid) {
-        try {
-          const picUrl = await sock.profilePictureUrl(targetJid, 'image');
-          if (picUrl) {
-            const { data } = await axios.get(picUrl, { responseType: 'arraybuffer' });
-            const buffer = Buffer.from(data);
-            const dir = path.join(MEDIA_DIR, session.id);
-            fs.mkdirSync(dir, { recursive: true });
-            const filePath = path.join(dir, 'profile-+5215539985884.jpg');
-            fs.writeFileSync(filePath, buffer);
-            console.log('✅ Profile picture saved to:', filePath);
-          }
-        } catch (err) {
-          console.error('❌ Failed to download profile picture:', err.message);
-        }
-      }
-      // —— end profile-picture download ——
     }
-
     if (connection === 'close') {
       session.isAuthenticated = false;
       const code = lastDisconnect?.error?.output?.statusCode;
