@@ -2,3 +2,4 @@ node_modules/
 media
 auth
 auth_sessions
+chat.db
