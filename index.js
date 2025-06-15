@@ -1,4 +1,3 @@
-// @path: index.js
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -178,7 +177,6 @@ app.post('/send/media',
     }
   });
 
-// ADDED: Endpoint to send emoji reactions to a message.
 app.post('/send/reaction',
   authMiddleware,
   body('jid').isString(),

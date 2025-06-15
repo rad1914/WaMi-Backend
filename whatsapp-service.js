@@ -1,4 +1,5 @@
-// @path: whatsapp-service.js
+// whatsapp-service.js (endpoint) 
+
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -37,7 +38,8 @@ export const normalizeJid = (input) => {
 };
 
 const isGroup = jid => jid.endsWith('@g.us');
-const getText = m => m?.conversation || m?.extendedTextMessage?.text || m?.caption;
+// MODIFIED: Added `reactionMessage.text` to correctly capture the emoji from a reaction.
+const getText = m => m?.conversation || m?.extendedTextMessage?.text || m?.caption || m?.reactionMessage?.text;
 const getType = m =>
   ['reaction', 'sticker', 'image', 'video', 'audio', 'document', 'location', 'contact', 'extendedText', 'conversation']
     .find(type => m?.[`${type}Message`] || (type === 'conversation' && m?.conversation));
@@ -105,16 +107,16 @@ export async function createWhatsappSession(session, onLogout) {
         } catch { /* ignore download errors */ }
       }
       
-      const quotedMessageId = content?.contextInfo?.stanzaId || null;
+      // MODIFIED: Added `content?.key?.id` to correctly get the target message ID for reactions.
+      const quotedMessageId = content?.contextInfo?.stanzaId || content?.key?.id || null;
       const quotedMessageText = getText(content?.contextInfo?.quotedMessage) || null;
 
-      // MODIFIED: Added 'type' to the database insert operation.
       insertMessage.run({
         message_id: id,
         session_id: session.id,
         jid: remoteJid,
         text,
-        type, // ADDED
+        type,
         isOutgoing: fromMe ? 1 : 0,
         status: fromMe ? 'sent' : 'received',
         timestamp: ts,
@@ -136,12 +138,11 @@ export async function createWhatsappSession(session, onLogout) {
         increment_unread: fromMe ? 0 : 1
       });
 
-      // MODIFIED: The socket payload now mirrors the full message structure.
       session.io.emit('whatsapp-message', [{
         id: id,
         jid: remoteJid,
         text: text,
-        type: type, // ADDED
+        type: type,
         isOutgoing: fromMe ? 1 : 0,
         status: fromMe ? 'sent' : 'received',
         timestamp: ts,

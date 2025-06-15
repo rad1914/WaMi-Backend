@@ -1,4 +1,3 @@
-// @path: database.js
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -13,7 +12,6 @@ if (!fs.existsSync(mediaDir)) {
 
 const db = new Database(process.env.SQLITE_PATH || './chat.db');
 
-// MODIFIED: Added 'type' column to store the message type (e.g., 'sticker', 'image').
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +19,7 @@ db.exec(`
     session_id TEXT NOT NULL,
     jid TEXT NOT NULL,
     text TEXT,
-    type TEXT, -- ADDED
+    type TEXT,
     isOutgoing INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'sent',
     timestamp INTEGER NOT NULL,
@@ -47,7 +45,6 @@ db.exec(`
   )
 `);
 
-// MODIFIED: Updated to insert the new 'type' field.
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
     (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text)
@@ -59,7 +56,6 @@ const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
-// MODIFIED: Selects the new 'type' field.
 const getMessagesByJid = db.prepare(`
   SELECT 
     message_id as id, jid, text, type, isOutgoing, status, timestamp, participant, 
