@@ -181,4 +181,4 @@ Contributions, issues, and feature requests are welcome! Feel free to check [iss
 
 ---
 
-© 2025 WaMi-Endpoint Contributors. All rights reserved.
+~ Made with <3 by @RADWrld
