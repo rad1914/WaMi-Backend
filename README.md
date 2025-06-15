@@ -118,7 +118,7 @@ const socket = io("http://<server-address>", {
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/wami-endpoint.git
+git clone https://github.com/rad1914/WaMi-Backend.git
 cd wami-endpoint
 
 # Install dependencies
@@ -177,7 +177,7 @@ Server logs will indicate restoration of any existing sessions and startup statu
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check [issues page](https://github.com/your-username/wami-endpoint/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check [issues page](https://github.com/rad1914/WaMi-Backend/issues).
 
 ---
 
