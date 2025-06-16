@@ -1,3 +1,4 @@
+// @path: database.js
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -45,6 +46,16 @@ db.exec(`
   )
 `);
 
+// ++ Applied suggestion: Added a dedicated table for reactions for scalability.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reactions (
+    message_id TEXT NOT NULL,
+    sender_jid TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    PRIMARY KEY (message_id, sender_jid)
+  )
+`);
+
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
     (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text)
@@ -56,15 +67,50 @@ const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
+// ++ Applied suggestion: The query now aggregates reactions into a JSON object.
 const getMessagesByJid = db.prepare(`
   SELECT 
-    message_id as id, jid, text, type, isOutgoing, status, timestamp, participant, 
-    sender_name as name, 
-    media_url, mimetype, quoted_message_id, quoted_message_text
-  FROM messages
+    m.message_id as id, m.jid, m.text, m.type, m.isOutgoing, m.status, m.timestamp, m.participant, 
+    m.sender_name as name, 
+    m.media_url, m.mimetype, m.quoted_message_id, m.quoted_message_text,
+    (
+      SELECT json_group_object(emoji, count)
+      FROM (
+        SELECT emoji, COUNT(*) as count
+        FROM reactions r
+        WHERE r.message_id = m.message_id
+        GROUP BY emoji
+      )
+    ) as reactions
+  FROM messages m
+  WHERE m.session_id = @session_id AND m.jid = @jid
+  ORDER BY m.timestamp DESC
+  LIMIT @limit
+`);
+
+// ++ Applied suggestion: Added a query to get a single message's aggregated reactions.
+const getSingleMessage = db.prepare(`
+  SELECT 
+    m.message_id as id,
+    (
+      SELECT json_group_object(emoji, count)
+      FROM (
+        SELECT emoji, COUNT(*) as count
+        FROM reactions r
+        WHERE r.message_id = m.message_id
+        GROUP BY emoji
+      )
+    ) as reactions
+  FROM messages m
+  WHERE m.message_id = @message_id
+`);
+
+
+const getOldestMessageDetails = db.prepare(`
+  SELECT message_id, isOutgoing, participant, timestamp FROM messages
   WHERE session_id = @session_id AND jid = @jid
   ORDER BY timestamp ASC
-  LIMIT @limit
+  LIMIT 1
 `);
 
 const upsertChat = db.prepare(`
@@ -78,7 +124,7 @@ const upsertChat = db.prepare(`
 `);
 
 const getChats = db.prepare(`
-    SELECT jid, name, is_group, last_message, last_message_timestamp, unread_count as unreadCount FROM chats
+    SELECT jid, name, is_group as isGroupInt, last_message, last_message_timestamp, unread_count as unreadCount FROM chats
     WHERE session_id = @session_id
     ORDER BY last_message_timestamp DESC
 `);
@@ -87,12 +133,30 @@ const resetChatUnreadCount = db.prepare(`
     UPDATE chats SET unread_count = 0 WHERE session_id = @session_id AND jid = @jid
 `);
 
+// ++ Applied suggestion: Added statements for inserting/deleting specific reactions.
+const upsertReaction = db.prepare(`
+    INSERT OR REPLACE INTO reactions (message_id, sender_jid, emoji) VALUES (@message_id, @sender_jid, @emoji)
+`);
+
+const deleteReaction = db.prepare(`
+    DELETE FROM reactions WHERE message_id = @message_id AND sender_jid = @sender_jid
+`);
+
+const runInTransaction = (fn) => {
+    return db.transaction(fn)();
+};
+
 export {
     db,
     insertMessage,
     updateMessageStatus,
     getMessagesByJid,
+    getSingleMessage,
+    getOldestMessageDetails,
     upsertChat,
     getChats,
-    resetChatUnreadCount
+    resetChatUnreadCount,
+    upsertReaction,
+    deleteReaction,
+    runInTransaction
 };

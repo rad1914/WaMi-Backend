@@ -1,5 +1,4 @@
-// index.js (EndPoint) 
-
+// @path: index.js
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -13,7 +12,7 @@ import { body, validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 
 import { createWhatsappSession, normalizeJid } from './whatsapp-service.js';
-import { getMessagesByJid, getChats, resetChatUnreadCount } from './database.js';
+import { getMessagesByJid, getChats, resetChatUnreadCount, db } from './database.js';
 import { logger } from './logger.js';
 
 dotenv.config();
@@ -30,7 +29,19 @@ const sessions = new Map();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 });
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 100 * 1024 * 1024 // 100 MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const isSessionImport = req.path.includes('/session/import');
+    if (isSessionImport && file.mimetype !== 'application/zip') {
+      return cb(new Error('Session import only accepts .zip files.'));
+    }
+    cb(null, true);
+  }
+});
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -45,7 +56,8 @@ app.use('/media', express.static(path.join(process.cwd(), MEDIA_DIR)));
 
 app.use((req, _, next) => {
   const sessionId = req.headers.authorization?.split(' ')[1] || 'N/A';
-  logger.info(`[${sessionId}] ${req.method} ${req.url} - ${JSON.stringify(req.body)}`);
+  const bodyToLog = req.path.includes('/send/media') ? { ...req.body, file: '...omitted...' } : req.body;
+  logger.info(`[${sessionId}] ${req.method} ${req.url} - ${JSON.stringify(bodyToLog)}`);
   next();
 });
 
@@ -59,14 +71,24 @@ io.on('connection', socket => {
   }
 });
 
+const createOnLogout = (sessionId) => {
+  return () => {
+    logger.info(`Session ${sessionId} was logged out and removed.`);
+    const sessionAuthPath = path.join(SESSIONS_DIR, sessionId);
+    const sessionMediaPath = path.join(MEDIA_DIR, sessionId);
+
+    fs.rmSync(sessionAuthPath, { recursive: true, force: true });
+    fs.rmSync(sessionMediaPath, { recursive: true, force: true });
+    
+    sessions.delete(sessionId);
+  };
+};
+
 app.post('/session/create', (req, res) => {
   const sessionId = uuidv4();
   const session = { id: sessionId, sock: null, isAuthenticated: false, latestQR: null, io: io.to(sessionId) };
   sessions.set(sessionId, session);
-  createWhatsappSession(session, () => {
-    fs.rmSync(path.join(SESSIONS_DIR, sessionId), { recursive: true, force: true });
-    sessions.delete(sessionId);
-  });
+  createWhatsappSession(session, createOnLogout(sessionId));
   res.json({ sessionId });
 });
 
@@ -95,43 +117,76 @@ app.post('/session/import', authMiddleware, upload.single('sessionFile'), async 
     fs.rmSync(sessionPath, { recursive: true, force: true });
     fs.mkdirSync(sessionPath);
     await unzipper.Extract({ path: sessionPath }).promise(file.buffer);
-    await createWhatsappSession(session, () => sessions.delete(session.id));
+    createWhatsappSession(session, createOnLogout(session.id));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-app.get('/chats', authMiddleware, async (req, res) => {
+app.get('/chats', authMiddleware, (req, res) => {
   try {
     const chats = getChats.all({ session_id: req.session.id });
-    const chatsWithAvatars = await Promise.all(
-      chats.map(async (chat) => {
-        let avatarUrl = null;
-        if (req.session.sock) {
-          try {
-            avatarUrl = await req.session.sock.profilePictureUrl(chat.jid, 'image');
-          } catch (e) { /* Fails if no avatar is set, which is fine. */ }
-        }
-        return { ...chat, avatarUrl };
-      })
-    );
-    res.json(chatsWithAvatars);
+    res.json(chats);
   } catch (e) {
     logger.error(`[${req.session.id}] /chats failed:`, e);
     res.status(500).json({ error: 'Fetch failed' });
   }
 });
 
+app.get('/avatar/:jid', authMiddleware, async (req, res) => {
+  try {
+    const { jid } = req.params;
+    const url = await req.session.sock.profilePictureUrl(jid, 'image');
+    res.redirect(url);
+  } catch (e) {
+    const placeholder = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Length': placeholder.length
+    });
+    res.end(placeholder);
+  }
+});
+
 app.get('/history/:jid', authMiddleware, (req, res) => {
   const jid = normalizeJid(decodeURIComponent(req.params.jid));
   if (!jid) return res.status(400).json({ error: 'Invalid JID' });
+  
   resetChatUnreadCount.run({ session_id: req.session.id, jid });
+  
   try {
     const rows = getMessagesByJid.all({ session_id: req.session.id, jid, limit: req.query.limit || 200 });
-    res.json(rows);
-  } catch {
+    
+    const messages = rows.map(msg => ({
+      ...msg,
+      reactions: msg.reactions ? JSON.parse(msg.reactions) : {}
+    })).reverse();
+
+    res.json(messages);
+  } catch(e) {
+    logger.error(`[${req.session.id}] /history/:jid failed:`, e)
     res.status(500).json({ error: 'Fetch failed' });
+  }
+});
+
+app.post('/history/sync/:jid', authMiddleware, async (req, res) => {
+  const { session } = req;
+  const { jid } = req.params;
+
+  if (!session.isAuthenticated || !session.sock) {
+    return res.status(409).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const count = await session.fetchMoreMessages(jid);
+    res.json({ success: true, message: `History fetch initiated. Fetched ${count} older messages.` });
+  } catch (e) {
+    logger.error(`[${session.id}] /history/sync failed:`, e);
+    res.status(500).json({ error: e.message || 'Failed to fetch history' });
   }
 });
 
@@ -181,10 +236,8 @@ app.post('/send/media',
 
 app.post('/send/reaction',
   authMiddleware,
-  body('jid').isString(),
-  body('messageId').isString(),
-  body('fromMe').isBoolean(),
-  body('emoji').isString(),
+  body('jid').isString(), body('messageId').isString(),
+  body('fromMe').isBoolean(), body('emoji').isString(),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -195,23 +248,11 @@ app.post('/send/reaction',
     try {
       const { jid, messageId, fromMe, emoji } = req.body;
       const fullJid = normalizeJid(jid);
-
-      const messageKey = {
-        remoteJid: fullJid,
-        id: messageId,
-        fromMe: fromMe
-      };
-
-      await session.sock.sendMessage(fullJid, {
-        react: {
-          text: emoji,
-          key: messageKey
-        }
-      });
-      
+      const messageKey = { remoteJid: fullJid, id: messageId, fromMe: fromMe };
+      await session.sock.sendMessage(fullJid, { react: { text: emoji, key: messageKey } });
       res.json({ success: true });
     } catch (e) {
-      logger.error(`[${req.session.id}] /send/reaction failed:`, e);
+      logger.error(`[${session.id}] /send/reaction failed:`, e);
       res.status(500).json({ error: e.message });
     }
   });
@@ -222,28 +263,37 @@ function restoreSessions() {
     logger.info(`Found ${sessionFolders.length} session(s) to restore.`);
 
     for (const id of sessionFolders) {
-      const sessionPath = path.join(SESSIONS_DIR, id);
-      if (fs.statSync(sessionPath).isDirectory()) {
+      if (fs.statSync(path.join(SESSIONS_DIR, id)).isDirectory()) {
         logger.info(`Restoring session: ${id}`);
         const session = { id, sock: null, isAuthenticated: false, latestQR: null, io: io.to(id) };
         sessions.set(id, session);
-        createWhatsappSession(session, () => {
-          logger.info(`Session ${id} was logged out and removed.`);
-          fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true });
-          sessions.delete(id);
-        });
+        createWhatsappSession(session, createOnLogout(id));
       }
     }
   } catch (e) {
-    if (e.code === 'ENOENT') {
-      logger.info('Sessions directory not found, skipping restore.');
-    } else {
-      logger.error('Startup restore failed:', e);
-    }
+    if (e.code === 'ENOENT') logger.info('Sessions directory not found, skipping restore.');
+    else logger.error('Startup restore failed:', e);
   }
 }
 
-server.listen(PORT, () => {
+const listener = server.listen(PORT, () => {
   logger.info(`Listening on ${PORT}`);
   restoreSessions();
 });
+
+const gracefulShutdown = (signal) => {
+  logger.info(`${signal} received. Shutting down gracefully...`);
+  listener.close(() => {
+    logger.info('HTTP server closed.');
+    sessions.forEach(session => session.sock?.end(new Error('Server shutting down.')));
+    db.close((err) => {
+      if (err) logger.error('Error closing database:', err.message);
+      else logger.info('Database connection closed.');
+    });
+    logger.info('Shutdown complete.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
