@@ -1,3 +1,6 @@
+// @path: logger.js
+// @path: logger.js
+// @path: logger.js
 // logger.js
 import P from 'pino';
 import pinoHttp from 'pino-http';

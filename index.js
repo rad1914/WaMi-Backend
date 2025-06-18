@@ -1,6 +1,7 @@
 // @path: index.js
 import express from 'express';
 import http from 'http';
+import https from 'https';
 import { Server } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
@@ -16,28 +17,23 @@ import { getMessagesByJid, getChats, resetChatUnreadCount, db } from './database
 import { logger } from './logger.js';
 
 dotenv.config();
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
-
 const PORT = process.env.PORT || 3007;
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 const MEDIA_DIR = process.env.MEDIA_DIR || './media';
 const sessions = new Map();
 
-[SESSIONS_DIR, MEDIA_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-});
+[SESSIONS_DIR, MEDIA_DIR].forEach(dir => !fs.existsSync(dir) && fs.mkdirSync(dir));
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 100 * 1024 * 1024 // 100 MB limit
-  },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const isSessionImport = req.path.includes('/session/import');
-    if (isSessionImport && file.mimetype !== 'application/zip') {
-      return cb(new Error('Session import only accepts .zip files.'));
+    if (req.path.includes('/session/import') && file.mimetype !== 'application/zip') {
+      return cb(new Error('Only .zip allowed'));
     }
     cb(null, true);
   }
@@ -52,44 +48,37 @@ const authMiddleware = (req, res, next) => {
 };
 
 app.use(express.json());
-app.use('/media', express.static(path.join(process.cwd(), MEDIA_DIR)));
 
 app.use((req, _, next) => {
-  const sessionId = req.headers.authorization?.split(' ')[1] || 'N/A';
-  const bodyToLog = req.path.includes('/send/media') ? { ...req.body, file: '...omitted...' } : req.body;
-  logger.info(`[${sessionId}] ${req.method} ${req.url} - ${JSON.stringify(bodyToLog)}`);
+  const sid = req.headers.authorization?.split(' ')[1] || 'N/A';
+  const logBody = req.path.includes('/send/media') ? { ...req.body, file: '...omitted...' } : req.body;
+  logger.info(`[${sid}] ${req.method} ${req.url} - ${JSON.stringify(logBody)}`);
   next();
 });
 
 io.on('connection', socket => {
-  const sessionId = socket.handshake.auth.token;
-  if (sessions.has(sessionId)) {
-    socket.join(sessionId);
-    logger.info(`[${sessionId}] Socket.IO connected`);
+  const sid = socket.handshake.auth.token;
+  if (sessions.has(sid)) {
+    socket.join(sid);
+    logger.info(`[${sid}] Socket connected`);
   } else {
     socket.disconnect(true);
   }
 });
 
-const createOnLogout = (sessionId) => {
-  return () => {
-    logger.info(`Session ${sessionId} was logged out and removed.`);
-    const sessionAuthPath = path.join(SESSIONS_DIR, sessionId);
-    const sessionMediaPath = path.join(MEDIA_DIR, sessionId);
-
-    fs.rmSync(sessionAuthPath, { recursive: true, force: true });
-    fs.rmSync(sessionMediaPath, { recursive: true, force: true });
-    
-    sessions.delete(sessionId);
-  };
+const createOnLogout = (id) => () => {
+  logger.info(`Session ${id} logged out`);
+  fs.rmSync(path.join(SESSIONS_DIR, id), { recursive: true, force: true });
+  fs.rmSync(path.join(MEDIA_DIR, id), { recursive: true, force: true });
+  sessions.delete(id);
 };
 
 app.post('/session/create', (req, res) => {
-  const sessionId = uuidv4();
-  const session = { id: sessionId, sock: null, isAuthenticated: false, latestQR: null, io: io.to(sessionId) };
-  sessions.set(sessionId, session);
-  createWhatsappSession(session, createOnLogout(sessionId));
-  res.json({ sessionId });
+  const id = uuidv4();
+  const session = { id, sock: null, isAuthenticated: false, latestQR: null, io: io.to(id) };
+  sessions.set(id, session);
+  createWhatsappSession(session, createOnLogout(id));
+  res.json({ sessionId: id });
 });
 
 app.get('/status', authMiddleware, (req, res) => {
@@ -102,15 +91,16 @@ app.post('/session/logout', authMiddleware, async (req, res) => {
 });
 
 app.get('/session/export', authMiddleware, (req, res) => {
-  const sessionPath = path.join(SESSIONS_DIR, req.session.id);
-  if (!fs.existsSync(sessionPath)) return res.status(404).json({ error: 'Not found' });
-  res.attachment(`wami-session-${req.session.id}.zip`);
-  archiver('zip', { zlib: { level: 9 } }).directory(sessionPath, false).pipe(res).finalize();
+  const dir = path.join(SESSIONS_DIR, req.session.id);
+  if (!fs.existsSync(dir)) return res.status(404).json({ error: 'Not found' });
+  res.attachment(`session-${req.session.id}.zip`);
+  archiver('zip', { zlib: { level: 9 } }).directory(dir, false).pipe(res).finalize();
 });
 
 app.post('/session/import', authMiddleware, upload.single('sessionFile'), async (req, res) => {
   const { session, file } = req;
-  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!file) return res.status(400).json({ error: 'No file' });
+
   const sessionPath = path.join(SESSIONS_DIR, session.id);
   try {
     await session.sock?.logout();
@@ -126,67 +116,75 @@ app.post('/session/import', authMiddleware, upload.single('sessionFile'), async 
 
 app.get('/chats', authMiddleware, (req, res) => {
   try {
-    const chats = getChats.all({ session_id: req.session.id });
-    res.json(chats);
+    res.json(getChats.all({ session_id: req.session.id }));
   } catch (e) {
-    logger.error(`[${req.session.id}] /chats failed:`, e);
+    logger.error(`/chats failed`, e);
     res.status(500).json({ error: 'Fetch failed' });
   }
 });
 
+const sendPlaceholder = (res) => {
+  const img = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': img.length });
+  res.end(img);
+};
+
 app.get('/avatar/:jid', authMiddleware, async (req, res) => {
   try {
-    const { jid } = req.params;
-    const url = await req.session.sock.profilePictureUrl(jid, 'image');
-    res.redirect(url);
-  } catch (e) {
-    const placeholder = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-      'base64'
-    );
-    res.writeHead(200, {
-      'Content-Type': 'image/png',
-      'Content-Length': placeholder.length
-    });
-    res.end(placeholder);
+    const url = await req.session.sock.profilePictureUrl(req.params.jid, 'preview');
+    https.get(url, r => {
+      if (r.statusCode >= 400) return sendPlaceholder(res);
+      res.writeHead(r.statusCode, {
+        'Content-Type': r.headers['content-type'],
+        'Cache-Control': 'public, max-age=86400'
+      });
+      r.pipe(res);
+    }).on('error', () => sendPlaceholder(res));
+  } catch {
+    sendPlaceholder(res);
   }
+});
+
+const serveMedia = (res, session, fileName) => {
+  const filePath = path.resolve(path.join(MEDIA_DIR, session.id, fileName));
+  if (!filePath.startsWith(path.resolve(path.join(MEDIA_DIR, session.id))))
+    return res.status(403).json({ error: 'Forbidden' });
+
+  fs.existsSync(filePath) ? res.sendFile(filePath) : res.status(404).json({ error: 'Not found' });
+};
+
+app.get('/media/:fileName', authMiddleware, (req, res) => {
+  serveMedia(res, req.session, req.params.fileName);
+});
+
+app.get('/media/:sessionId/:fileName', authMiddleware, (req, res) => {
+  if (req.session.id !== req.params.sessionId)
+    return res.status(403).json({ error: 'Forbidden' });
+  serveMedia(res, req.session, req.params.fileName);
 });
 
 app.get('/history/:jid', authMiddleware, (req, res) => {
   const jid = normalizeJid(decodeURIComponent(req.params.jid));
   if (!jid) return res.status(400).json({ error: 'Invalid JID' });
-  
   resetChatUnreadCount.run({ session_id: req.session.id, jid });
-  
+
   try {
     const rows = getMessagesByJid.all({ session_id: req.session.id, jid, limit: req.query.limit || 200 });
-    
-    const messages = rows.map(msg => ({
-      ...msg,
-      reactions: msg.reactions ? JSON.parse(msg.reactions) : {}
-    })).reverse();
-
+    const messages = rows.map(m => ({ ...m, reactions: m.reactions ? JSON.parse(m.reactions) : {} })).reverse();
     res.json(messages);
-  } catch(e) {
-    logger.error(`[${req.session.id}] /history/:jid failed:`, e)
+  } catch (e) {
+    logger.error(`/history failed`, e);
     res.status(500).json({ error: 'Fetch failed' });
   }
 });
 
 app.post('/history/sync/:jid', authMiddleware, async (req, res) => {
-  const { session } = req;
-  const { jid } = req.params;
-
-  if (!session.isAuthenticated || !session.sock) {
-    return res.status(409).json({ error: 'Not authenticated' });
-  }
-
   try {
-    const count = await session.fetchMoreMessages(jid);
-    res.json({ success: true, message: `History fetch initiated. Fetched ${count} older messages.` });
+    const count = await req.session.fetchMoreMessages(req.params.jid);
+    res.json({ success: true, message: `Fetched ${count} messages.` });
   } catch (e) {
-    logger.error(`[${session.id}] /history/sync failed:`, e);
-    res.status(500).json({ error: e.message || 'Failed to fetch history' });
+    logger.error(`/history/sync failed`, e);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -196,15 +194,13 @@ app.post('/send',
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const { jid, text, tempId } = req.body;
-    const { session } = req;
-    if (!session.isAuthenticated || !session.sock) return res.status(409).json({ error: 'Not authenticated' });
     try {
+      const { jid, text, tempId } = req.body;
       const fullJid = normalizeJid(jid);
-      const sent = await session.sock.sendMessage(fullJid, { text });
-      res.json({ success: true, messageId: sent.key.id, tempId, timestamp: Date.now() });
+      const msg = await req.session.sock.sendMessage(fullJid, { text });
+      res.json({ success: true, messageId: msg.key.id, tempId, timestamp: Date.now() });
     } catch (e) {
-      res.status(500).json({ error: e.message, tempId });
+      res.status(500).json({ error: e.message, tempId: req.body.tempId });
     }
   });
 
@@ -218,16 +214,15 @@ app.post('/send/media',
 
     const { session, file } = req;
     const { jid, caption } = req.body;
-    if (!file || !session.isAuthenticated || !session.sock) return res.status(409).json({ error: 'Invalid request' });
+    const type = file.mimetype.startsWith('image/') ? 'image' :
+                 file.mimetype.startsWith('video/') ? 'video' : 'document';
+
+    const content = { [type]: file.buffer, mimetype: file.mimetype };
+    if (type === 'image' || type === 'video') content.caption = caption;
+    if (type === 'document') content.fileName = file.originalname;
 
     try {
-      const fullJid = normalizeJid(jid);
-      const type = file.mimetype.startsWith('image/') ? 'image' :
-                   file.mimetype.startsWith('video/') ? 'video' : 'document';
-      const content = { [type]: file.buffer, mimetype: file.mimetype };
-      if (type === 'image' || type === 'video') content.caption = caption;
-      if (type === 'document') content.fileName = file.originalname;
-      const sent = await session.sock.sendMessage(fullJid, content);
+      const sent = await session.sock.sendMessage(normalizeJid(jid), content);
       res.json({ success: true, messageId: sent.key.id });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -242,37 +237,27 @@ app.post('/send/reaction',
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { session } = req;
-    if (!session.isAuthenticated || !session.sock) return res.status(409).json({ error: 'Not authenticated' });
-    
     try {
       const { jid, messageId, fromMe, emoji } = req.body;
-      const fullJid = normalizeJid(jid);
-      const messageKey = { remoteJid: fullJid, id: messageId, fromMe: fromMe };
-      await session.sock.sendMessage(fullJid, { react: { text: emoji, key: messageKey } });
+      const key = { remoteJid: normalizeJid(jid), id: messageId, fromMe };
+      await req.session.sock.sendMessage(key.remoteJid, { react: { text: emoji, key } });
       res.json({ success: true });
     } catch (e) {
-      logger.error(`[${session.id}] /send/reaction failed:`, e);
+      logger.error(`/send/reaction failed`, e);
       res.status(500).json({ error: e.message });
     }
   });
 
 function restoreSessions() {
   try {
-    const sessionFolders = fs.readdirSync(SESSIONS_DIR);
-    logger.info(`Found ${sessionFolders.length} session(s) to restore.`);
-
-    for (const id of sessionFolders) {
-      if (fs.statSync(path.join(SESSIONS_DIR, id)).isDirectory()) {
-        logger.info(`Restoring session: ${id}`);
-        const session = { id, sock: null, isAuthenticated: false, latestQR: null, io: io.to(id) };
-        sessions.set(id, session);
-        createWhatsappSession(session, createOnLogout(id));
-      }
-    }
+    const ids = fs.readdirSync(SESSIONS_DIR).filter(d => fs.statSync(path.join(SESSIONS_DIR, d)).isDirectory());
+    ids.forEach(id => {
+      const session = { id, sock: null, isAuthenticated: false, latestQR: null, io: io.to(id) };
+      sessions.set(id, session);
+      createWhatsappSession(session, createOnLogout(id));
+    });
   } catch (e) {
-    if (e.code === 'ENOENT') logger.info('Sessions directory not found, skipping restore.');
-    else logger.error('Startup restore failed:', e);
+    if (e.code !== 'ENOENT') logger.error('Restore failed', e);
   }
 }
 
@@ -282,18 +267,11 @@ const listener = server.listen(PORT, () => {
 });
 
 const gracefulShutdown = (signal) => {
-  logger.info(`${signal} received. Shutting down gracefully...`);
+  logger.info(`${signal} received. Closing...`);
   listener.close(() => {
-    logger.info('HTTP server closed.');
-    sessions.forEach(session => session.sock?.end(new Error('Server shutting down.')));
-    db.close((err) => {
-      if (err) logger.error('Error closing database:', err.message);
-      else logger.info('Database connection closed.');
-    });
-    logger.info('Shutdown complete.');
-    process.exit(0);
+    sessions.forEach(s => s.sock?.end(new Error('Shutting down')));
+    db.close(() => process.exit(0));
   });
 };
 
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
+['SIGINT', 'SIGTERM'].forEach(sig => process.on(sig, () => gracefulShutdown(sig)));

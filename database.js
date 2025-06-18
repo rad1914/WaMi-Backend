@@ -3,7 +3,6 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
 const mediaDir = process.env.MEDIA_DIR || './media';
@@ -29,8 +28,13 @@ db.exec(`
     media_url TEXT,
     mimetype TEXT,
     quoted_message_id TEXT,
-    quoted_message_text TEXT
+    quoted_message_text TEXT,
+    media_sha256 TEXT
   )
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);
 `);
 
 db.exec(`
@@ -46,7 +50,6 @@ db.exec(`
   )
 `);
 
-// ++ Applied suggestion: Added a dedicated table for reactions for scalability.
 db.exec(`
   CREATE TABLE IF NOT EXISTS reactions (
     message_id TEXT NOT NULL,
@@ -58,16 +61,15 @@ db.exec(`
 
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
-    (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text)
+    (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text, media_sha256)
   VALUES
-    (@message_id, @session_id, @jid, @text, @type, @isOutgoing, @status, @timestamp, @participant, @sender_name, @media_url, @mimetype, @quoted_message_id, @quoted_message_text)
+    (@message_id, @session_id, @jid, @text, @type, @isOutgoing, @status, @timestamp, @participant, @sender_name, @media_url, @mimetype, @quoted_message_id, @quoted_message_text, @media_sha256)
 `);
 
 const updateMessageStatus = db.prepare(`
   UPDATE messages SET status = @status WHERE message_id = @id
 `);
 
-// ++ Applied suggestion: The query now aggregates reactions into a JSON object.
 const getMessagesByJid = db.prepare(`
   SELECT 
     m.message_id as id, m.jid, m.text, m.type, m.isOutgoing, m.status, m.timestamp, m.participant, 
@@ -88,7 +90,6 @@ const getMessagesByJid = db.prepare(`
   LIMIT @limit
 `);
 
-// ++ Applied suggestion: Added a query to get a single message's aggregated reactions.
 const getSingleMessage = db.prepare(`
   SELECT 
     m.message_id as id,
@@ -133,13 +134,18 @@ const resetChatUnreadCount = db.prepare(`
     UPDATE chats SET unread_count = 0 WHERE session_id = @session_id AND jid = @jid
 `);
 
-// ++ Applied suggestion: Added statements for inserting/deleting specific reactions.
 const upsertReaction = db.prepare(`
     INSERT OR REPLACE INTO reactions (message_id, sender_jid, emoji) VALUES (@message_id, @sender_jid, @emoji)
 `);
 
 const deleteReaction = db.prepare(`
     DELETE FROM reactions WHERE message_id = @message_id AND sender_jid = @sender_jid
+`);
+
+const findMessageBySha256 = db.prepare(`
+  SELECT media_url, mimetype FROM messages
+  WHERE media_sha256 = @media_sha256 AND media_url IS NOT NULL
+  LIMIT 1
 `);
 
 const runInTransaction = (fn) => {
@@ -158,5 +164,6 @@ export {
     resetChatUnreadCount,
     upsertReaction,
     deleteReaction,
+    findMessageBySha256,
     runInTransaction
 };
