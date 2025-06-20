@@ -1,4 +1,6 @@
 // @path: logger.js (ENDPOINT)
+// @path: logger.js (ENDPOINT)
+// @path: logger.js (ENDPOINT)
 // @path: logger.js
 // @path: logger.js
 // @path: logger.js

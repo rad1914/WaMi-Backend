@@ -1,3 +1,4 @@
+// @path: whatsapp-service.js (ENDPOINT)
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -113,7 +114,7 @@ async function processMessages(session, messages, isHistorical = false) {
         if (!isHistorical) {
           const isGroupChat = isGroup(msg.jid);
           const name = isGroupChat
-            ? (session.sock.chats[msg.jid]?.subject || msg.jid.split('@')[0])
+            ? (session.sock.chats?.[msg.jid]?.subject || msg.jid.split('@')[0])
             : msg.sender_name || msg.jid.split('@')[0];
           upsertChat.run({
             session_id: msg.session_id,

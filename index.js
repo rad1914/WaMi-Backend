@@ -1,3 +1,4 @@
+// @path: index.js (ENDPOINT)
 import express from 'express';
 import http from 'http';
 import https from 'https';
@@ -12,7 +13,16 @@ import { body, validationResult } from 'express-validator';
 import dotenv from 'dotenv';
 
 import { createWhatsappSession, normalizeJid } from './whatsapp-service.js';
-import { getMessagesByJid, getChats, resetChatUnreadCount, db } from './database.js';
+import {
+  getMessagesByJid,
+  getChats,
+  resetChatUnreadCount,
+  db,
+  getOldMediaForCleanup,
+  countMessagesBySha256,
+  deleteOldMessages,
+  deleteOldReactions
+} from './database.js';
 import { logger } from './logger.js';
 
 dotenv.config();
@@ -23,6 +33,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 const PORT = process.env.PORT || 3007;
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 const MEDIA_DIR = process.env.MEDIA_DIR || './media';
+const CLEANUP_DAYS = parseInt(process.env.CLEANUP_DAYS || '30', 10);
 const sessions = new Map();
 
 [SESSIONS_DIR, MEDIA_DIR].forEach(dir => !fs.existsSync(dir) && fs.mkdirSync(dir));
@@ -147,17 +158,14 @@ app.get('/avatar/:jid', authMiddleware, async (req, res) => {
 const serveMedia = (res, session, fileName) => {
   const filePath = path.resolve(path.join(MEDIA_DIR, session.id, fileName));
   if (!filePath.startsWith(path.resolve(path.join(MEDIA_DIR, session.id)))) {
-    // FIX: Added diagnostic logging
     logger.warn(`[${session.id}] Forbidden attempt to access media path: ${filePath}`);
     return res.status(403).json({ error: 'Forbidden' });
   }
 
   if (fs.existsSync(filePath)) {
-    // FIX: Added diagnostic logging
     logger.info(`[${session.id}] Serving media file: ${filePath}`);
     res.sendFile(filePath);
   } else {
-    // FIX: Added diagnostic logging
     logger.error(`[${session.id}] Media file not found: ${filePath}`);
     res.status(404).json({ error: 'Not found' });
   }
@@ -272,9 +280,73 @@ function restoreSessions() {
   }
 }
 
+/**
+ * Periodically cleans up old messages and orphaned media files.
+ */
+async function autoCleanup() {
+  if (CLEANUP_DAYS <= 0) {
+    logger.info('Auto cleanup is disabled as CLEANUP_DAYS is set to 0 or less.');
+    return;
+  }
+
+  logger.info(`Starting auto cleanup for messages and media older than ${CLEANUP_DAYS} days.`);
+  const cutoffTimestamp = Date.now() - (CLEANUP_DAYS * 24 * 60 * 60 * 1000);
+
+  try {
+    const mediaToPotentiallyDelete = getOldMediaForCleanup.all({ cutoffTimestamp });
+    logger.info(`Found ${mediaToPotentiallyDelete.length} media files from old messages to evaluate.`);
+
+    const cleanupDb = db.transaction(() => {
+      const reactionResult = deleteOldReactions.run({ cutoffTimestamp });
+      const messageResult = deleteOldMessages.run({ cutoffTimestamp });
+      if (messageResult.changes > 0 || reactionResult.changes > 0) {
+        logger.info(`Deleted ${messageResult.changes} old messages and ${reactionResult.changes} associated reactions.`);
+      }
+      return messageResult.changes;
+    });
+    const deletedMessagesCount = cleanupDb();
+
+    if (deletedMessagesCount === 0 && mediaToPotentiallyDelete.length === 0) {
+        logger.info('Auto cleanup finished. No old items to process.');
+        return;
+    }
+
+    let deletedFilesCount = 0;
+    const checkedShas = new Set();
+    for (const media of mediaToPotentiallyDelete) {
+      if (!media.media_sha256 || checkedShas.has(media.media_sha256)) continue;
+
+      const { count } = countMessagesBySha256.get({ media_sha256: media.media_sha256 });
+      checkedShas.add(media.media_sha256);
+
+      if (count === 0) {
+        const fileName = path.basename(media.media_url);
+        const filePath = path.join(MEDIA_DIR, media.session_id, fileName);
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.rmSync(filePath);
+            deletedFilesCount++;
+            logger.info(`[${media.session_id}] Deleted orphaned media file: ${filePath}`);
+          }
+        } catch (e) {
+          logger.error(`[${media.session_id}] Failed to delete media file ${filePath}`, e);
+        }
+      }
+    }
+
+    logger.info(`Auto cleanup finished. Deleted ${deletedFilesCount} orphaned media files.`);
+  } catch (e) {
+    logger.error('Auto cleanup process failed', e);
+  }
+}
+
 const listener = server.listen(PORT, () => {
   logger.info(`Listening on ${PORT}`);
   restoreSessions();
+  
+  logger.info(`Auto cleanup scheduled to run every 12 hours.`);
+  setTimeout(autoCleanup, 30 * 1000);
+  setInterval(autoCleanup, 96 * 60 * 60 * 1000);
 });
 
 const gracefulShutdown = (signal) => {

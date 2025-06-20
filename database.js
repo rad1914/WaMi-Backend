@@ -1,3 +1,4 @@
+// @path: database.js (ENDPOINT)
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -34,6 +35,10 @@ db.exec(`
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);
+`);
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_message_timestamp ON messages (timestamp);
 `);
 
 db.exec(`
@@ -74,7 +79,7 @@ const getMessagesByJid = db.prepare(`
     m.message_id as id, m.jid, m.text, m.type, m.isOutgoing, m.status, m.timestamp, m.participant, 
     m.sender_name as name, 
     m.media_url, m.mimetype, m.quoted_message_id, m.quoted_message_text,
-    m.media_sha256, -- FIX: Added the missing media_sha256 field to the query.
+    m.media_sha256,
     (
       SELECT json_group_object(emoji, count)
       FROM (
@@ -148,6 +153,23 @@ const findMessageBySha256 = db.prepare(`
   LIMIT 1
 `);
 
+const getOldMediaForCleanup = db.prepare(`
+  SELECT session_id, media_url, media_sha256 FROM messages
+  WHERE timestamp < @cutoffTimestamp AND media_sha256 IS NOT NULL
+`);
+
+const countMessagesBySha256 = db.prepare(`
+  SELECT COUNT(*) as count FROM messages WHERE media_sha256 = @media_sha256
+`);
+
+const deleteOldMessages = db.prepare(`
+  DELETE FROM messages WHERE timestamp < @cutoffTimestamp
+`);
+
+const deleteOldReactions = db.prepare(`
+  DELETE FROM reactions WHERE message_id IN (SELECT message_id FROM messages WHERE timestamp < @cutoffTimestamp)
+`);
+
 const runInTransaction = (fn) => {
     return db.transaction(fn)();
 };
@@ -165,5 +187,9 @@ export {
     upsertReaction,
     deleteReaction,
     findMessageBySha256,
-    runInTransaction
+    runInTransaction,
+    getOldMediaForCleanup,
+    countMessagesBySha256,
+    deleteOldMessages,
+    deleteOldReactions
 };
