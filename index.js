@@ -1,4 +1,3 @@
-// @path: index.js
 import express from 'express';
 import http from 'http';
 import https from 'https';
@@ -147,10 +146,21 @@ app.get('/avatar/:jid', authMiddleware, async (req, res) => {
 
 const serveMedia = (res, session, fileName) => {
   const filePath = path.resolve(path.join(MEDIA_DIR, session.id, fileName));
-  if (!filePath.startsWith(path.resolve(path.join(MEDIA_DIR, session.id))))
+  if (!filePath.startsWith(path.resolve(path.join(MEDIA_DIR, session.id)))) {
+    // FIX: Added diagnostic logging
+    logger.warn(`[${session.id}] Forbidden attempt to access media path: ${filePath}`);
     return res.status(403).json({ error: 'Forbidden' });
+  }
 
-  fs.existsSync(filePath) ? res.sendFile(filePath) : res.status(404).json({ error: 'Not found' });
+  if (fs.existsSync(filePath)) {
+    // FIX: Added diagnostic logging
+    logger.info(`[${session.id}] Serving media file: ${filePath}`);
+    res.sendFile(filePath);
+  } else {
+    // FIX: Added diagnostic logging
+    logger.error(`[${session.id}] Media file not found: ${filePath}`);
+    res.status(404).json({ error: 'Not found' });
+  }
 };
 
 app.get('/media/:fileName', authMiddleware, (req, res) => {
@@ -208,12 +218,13 @@ app.post('/send/media',
   authMiddleware,
   upload.single('file'),
   body('jid').isString(),
+  body('tempId').isString(),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { session, file } = req;
-    const { jid, caption } = req.body;
+    const { jid, caption, tempId } = req.body;
     const type = file.mimetype.startsWith('image/') ? 'image' :
                  file.mimetype.startsWith('video/') ? 'video' : 'document';
 
@@ -223,9 +234,9 @@ app.post('/send/media',
 
     try {
       const sent = await session.sock.sendMessage(normalizeJid(jid), content);
-      res.json({ success: true, messageId: sent.key.id });
+      res.json({ success: true, messageId: sent.key.id, tempId });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      res.status(500).json({ error: e.message, tempId: req.body.tempId });
     }
   });
 

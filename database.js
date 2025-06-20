@@ -1,4 +1,3 @@
-// @path: database.js
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -75,6 +74,7 @@ const getMessagesByJid = db.prepare(`
     m.message_id as id, m.jid, m.text, m.type, m.isOutgoing, m.status, m.timestamp, m.participant, 
     m.sender_name as name, 
     m.media_url, m.mimetype, m.quoted_message_id, m.quoted_message_text,
+    m.media_sha256, -- FIX: Added the missing media_sha256 field to the query.
     (
       SELECT json_group_object(emoji, count)
       FROM (

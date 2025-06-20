@@ -1,4 +1,3 @@
-// @path: whatsapp-service.js
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -35,6 +34,9 @@ dotenv.config();
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 const MEDIA_DIR = process.env.MEDIA_DIR || './media';
 
+// In-memory store for full message objects to aid in media decryption.
+const messageStore = new Map();
+
 const isGroup = jid => jid.endsWith('@g.us');
 const getText = m => m?.conversation || m?.extendedTextMessage?.text || m?.caption || m?.reactionMessage?.text;
 const getType = m => [
@@ -46,6 +48,11 @@ async function processMessages(session, messages, isHistorical = false) {
   const data = [];
 
   for (const m of messages) {
+    // Store the full message object. This is crucial for downloadMediaMessage if it needs context.
+    if (m.key?.id) {
+        messageStore.set(m.key.id, m);
+    }
+    
     if (!m.message || !m.key) continue;
 
     const type = getType(m.message);
@@ -54,26 +61,30 @@ async function processMessages(session, messages, isHistorical = false) {
     const content = m.message[`${type}Message`] || m.message;
     let media_url = null, mimetype = null, media_sha256 = null;
 
-    if (!isHistorical && ['image', 'video', 'audio', 'document', 'sticker'].includes(type)) {
+    if (['image', 'video', 'audio', 'document', 'sticker'].includes(type)) {
       mimetype = content.mimetype;
       try {
         const buffer = await downloadMediaMessage(m, 'buffer', {}, { reuploadRequest: session.sock.updateMediaMessage });
-        if (buffer) {
+        if (buffer && buffer.length > 0) {
+          logger.info(`[${session.id}] Downloaded media for message ${m.key.id}. Buffer size: ${buffer.length}`);
+
           media_sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-          const existing = findMessageBySha256.get({ media_sha256 });
-          if (existing?.media_url) {
-            media_url = existing.media_url;
-            mimetype = existing.mimetype;
-          } else {
-            const ext = mimetype?.split('/')[1]?.split(';')[0] || 'bin';
-            const dir = path.join(MEDIA_DIR, session.id);
-            const file = path.join(dir, `${media_sha256}.${ext}`);
-            await fs.promises.mkdir(dir, { recursive: true });
-            await fs.promises.writeFile(file, buffer);
-            media_url = `/media/${media_sha256}.${ext}`;
+          const ext = mimetype?.split('/')[1]?.split(';')[0] || 'bin';
+          const sessionMediaDir = path.join(MEDIA_DIR, session.id);
+          const mediaFilePath = path.join(sessionMediaDir, `${media_sha256}.${ext}`);
+
+          if (!fs.existsSync(mediaFilePath)) {
+            await fs.promises.mkdir(sessionMediaDir, { recursive: true });
+            await fs.promises.writeFile(mediaFilePath, buffer);
           }
+          
+          media_url = `/media/${session.id}/${media_sha256}.${ext}`;
+        } else {
+          logger.warn(`[${session.id}] Download media for message ${m.key.id} resulted in an empty or null buffer.`);
         }
-      } catch (e) {}
+      } catch (e) {
+        logger.error({ err: e }, `[${session.id}] Failed to download or save media for message ${m.key.id}`);
+      }
     }
 
     data.push({
@@ -123,12 +134,16 @@ async function processMessages(session, messages, isHistorical = false) {
         jid: m.jid,
         text: m.text,
         type: m.type,
-        isOutgoing: !!m.isOutgoing,
+        isOutgoing: m.isOutgoing,
         status: 'received',
+        timestamp: m.timestamp,
         name: m.sender_name,
         media_url: m.media_url,
+        mimetype: m.mimetype,
         quoted_message_id: m.quoted_message_id,
-        quoted_message_text: m.quoted_message_text
+        quoted_message_text: m.quoted_message_text,
+        reactions: {},
+        media_sha256: m.media_sha256,
       })));
     }
   }
@@ -189,7 +204,9 @@ export async function createWhatsappSession(session, onLogout) {
     syncFullHistory: true,
     auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys) },
     emitOwnEvents: true,
-    getMessage: async key => getMessagesByJid.get({ message_id: key.id, session_id: session.id })?.message,
+    getMessage: async (key) => {
+      return messageStore.get(key.id);
+    },
   });
 
   session.sock = sock;

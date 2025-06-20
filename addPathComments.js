@@ -1,28 +1,4 @@
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
-// @path: addPathComments.js
+// @path: addPathComments.js (ENDPOINT)
 
 import { promises as fs } from "fs";
 import { resolve, relative, extname } from "path";
@@ -41,7 +17,7 @@ async function prependCommentToFile(filePath) {
   switch (fileExtension) {
     case ".js":
     case ".kt":
-      commentLine = `// @path: ${relPath}\n`;
+      commentLine = `// @path: ${relPath} (ENDPOINT)\n`;
       break;
     case ".xml":
       commentLine = `<!-- @path: ${relPath} -->\n`;
