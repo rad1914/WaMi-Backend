@@ -1,29 +1,19 @@
-// @path: logger.js (ENDPOINT)
-// @path: logger.js (ENDPOINT)
-// @path: logger.js (ENDPOINT)
 // @path: logger.js
-// @path: logger.js
-// @path: logger.js
-// logger.js
-import P from 'pino';
-import pinoHttp from 'pino-http';
+import winston from 'winston';
 
-const isDev = process.env.NODE_ENV === 'development';
-
-const logger = P({
-  level: process.env.LOG_LEVEL || 'debug',
-  ...(isDev && { // Conditionally adds transport for development
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname'
-      }
-    }
-  })
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `[${timestamp}] ${level.toUpperCase()}: ${message}`;
+    })
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'combined.log' }),
+  ],
 });
 
-const httpLogger = pinoHttp({ logger });
-
-export { logger, httpLogger };
+export { logger };

@@ -1,14 +1,8 @@
-// @path: database.js (ENDPOINT)
+// @path: database.js
 import Database from 'better-sqlite3';
-import fs from 'fs';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const mediaDir = process.env.MEDIA_DIR || './media';
-if (!fs.existsSync(mediaDir)) {
-    fs.mkdirSync(mediaDir, { recursive: true });
-}
 
 const db = new Database(process.env.SQLITE_PATH || './chat.db');
 
@@ -33,13 +27,8 @@ db.exec(`
   )
 `);
 
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);
-`);
-
-db.exec(`
-  CREATE INDEX IF NOT EXISTS idx_message_timestamp ON messages (timestamp);
-`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_message_timestamp ON messages (timestamp);`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS chats (
@@ -79,20 +68,20 @@ const getMessagesByJid = db.prepare(`
     m.message_id as id, m.jid, m.text, m.type, m.isOutgoing, m.status, m.timestamp, m.participant, 
     m.sender_name as name, 
     m.media_url, m.mimetype, m.quoted_message_id, m.quoted_message_text,
-    m.media_sha256,
-    (
-      SELECT json_group_object(emoji, count)
-      FROM (
-        SELECT emoji, COUNT(*) as count
-        FROM reactions r
-        WHERE r.message_id = m.message_id
-        GROUP BY emoji
-      )
-    ) as reactions
+    m.media_sha256
   FROM messages m
   WHERE m.session_id = @session_id AND m.jid = @jid
   ORDER BY m.timestamp DESC
   LIMIT @limit
+`);
+
+const getReactionsForMessages = db.prepare(`
+    SELECT 
+        message_id,
+        sender_jid,
+        emoji
+    FROM reactions
+    WHERE message_id IN (SELECT value FROM json_each(?))
 `);
 
 const getSingleMessage = db.prepare(`
@@ -111,12 +100,15 @@ const getSingleMessage = db.prepare(`
   WHERE m.message_id = @message_id
 `);
 
-
 const getOldestMessageDetails = db.prepare(`
   SELECT message_id, isOutgoing, participant, timestamp FROM messages
   WHERE session_id = @session_id AND jid = @jid
   ORDER BY timestamp ASC
   LIMIT 1
+`);
+
+const getMessageKeyDetails = db.prepare(`
+    SELECT isOutgoing FROM messages WHERE message_id = @message_id AND session_id = @session_id LIMIT 1
 `);
 
 const upsertChat = db.prepare(`
@@ -153,21 +145,16 @@ const findMessageBySha256 = db.prepare(`
   LIMIT 1
 `);
 
-const getOldMediaForCleanup = db.prepare(`
-  SELECT session_id, media_url, media_sha256 FROM messages
-  WHERE timestamp < @cutoffTimestamp AND media_sha256 IS NOT NULL
-`);
-
-const countMessagesBySha256 = db.prepare(`
-  SELECT COUNT(*) as count FROM messages WHERE media_sha256 = @media_sha256
-`);
-
 const deleteOldMessages = db.prepare(`
   DELETE FROM messages WHERE timestamp < @cutoffTimestamp
 `);
 
 const deleteOldReactions = db.prepare(`
-  DELETE FROM reactions WHERE message_id IN (SELECT message_id FROM messages WHERE timestamp < @cutoffTimestamp)
+  DELETE FROM reactions
+  WHERE NOT EXISTS (
+    SELECT 1 FROM messages
+    WHERE messages.message_id = reactions.message_id
+  )
 `);
 
 const runInTransaction = (fn) => {
@@ -179,8 +166,10 @@ export {
     insertMessage,
     updateMessageStatus,
     getMessagesByJid,
+    getReactionsForMessages,
     getSingleMessage,
     getOldestMessageDetails,
+    getMessageKeyDetails,
     upsertChat,
     getChats,
     resetChatUnreadCount,
@@ -188,8 +177,6 @@ export {
     deleteReaction,
     findMessageBySha256,
     runInTransaction,
-    getOldMediaForCleanup,
-    countMessagesBySha256,
     deleteOldMessages,
     deleteOldReactions
 };

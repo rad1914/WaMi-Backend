@@ -1,6 +1,8 @@
 // @path: addPathComments.js (ENDPOINT)
 // @path: addPathComments.js (ENDPOINT)
 // @path: addPathComments.js (ENDPOINT)
+// @path: addPathComments.js (ENDPOINT)
+// @path: addPathComments.js (ENDPOINT)
 
 import { promises as fs } from "fs";
 import { resolve, relative, extname } from "path";
