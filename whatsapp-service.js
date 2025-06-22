@@ -30,7 +30,7 @@ import {
 dotenv.config();
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 
-const messageStore = new LRUCache({ max: 5000 });
+export const messageStore = new LRUCache({ max: 5000 });
 
 const isGroup = jid => jid.endsWith('@g.us');
 const getText = m => m?.conversation || m?.extendedTextMessage?.text || m?.caption || m?.reactionMessage?.text;
@@ -58,7 +58,7 @@ async function processMessages(session, messages, isHistorical = false) {
 
     if (['image', 'video', 'audio', 'document', 'sticker'].includes(type)) {
       mimetype = content.mimetype;
-      media_url = content.url;
+      media_url = content.url ? `/media/${m.key.id}` : null;
       media_sha256 = content.fileSha256 ? content.fileSha256.toString('hex') : null;
 
       if (!media_url) {
@@ -84,6 +84,8 @@ async function processMessages(session, messages, isHistorical = false) {
       quoted_message_id: content?.contextInfo?.stanzaId || content?.key?.id || null,
       quoted_message_text: getText(content?.contextInfo?.quotedMessage) || null,
       media_sha256,
+      // ++ AÑADIR: Guarda el objeto de mensaje completo como JSON
+      raw_message_data: JSON.stringify(m)
     };
     messageInserts.push(msgData);
     
@@ -146,6 +148,7 @@ async function processMessages(session, messages, isHistorical = false) {
   return messages.length;
 }
 
+// ... El resto del archivo no cambia ...
 export function normalizeJid(input) {
   try {
     const j = jidNormalizedUser(input);

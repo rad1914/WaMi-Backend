@@ -5,11 +5,13 @@ import multer from 'multer';
 import crypto from 'crypto';
 import sanitize from 'sanitize-filename';
 import { body } from 'express-validator';
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import { messageStore } from '../whatsapp-service.js';
 
 import auth from '../middleware/auth.js';
 import validate from '../middleware/validator.js';
 import { normalizeJid } from '../whatsapp-service.js';
-import { findMessageBySha256 } from '../database.js';
+import { findMessageBySha256, getMessageById } from '../database.js';
 import { logger } from '../logger.js';
 
 const router = express.Router();
@@ -26,6 +28,10 @@ const sendPlaceholder = (res) => {
   res.end(img);
 };
 
+const getType = (m) => [
+  'sticker', 'image', 'video', 'audio', 'document', 'conversation'
+].find(type => m?.[`${type}Message`]);
+
 router.get('/avatar/:jid', auth, async (req, res) => {
   try {
     const url = await req.session.sock.profilePictureUrl(req.params.jid, 'preview');
@@ -39,6 +45,47 @@ router.get('/avatar/:jid', auth, async (req, res) => {
     }).on('error', () => sendPlaceholder(res));
   } catch {
     sendPlaceholder(res);
+  }
+});
+
+// ++ CAMBIOS APLICADOS AQUÍ ++
+router.get('/media/:messageId', auth, async (req, res) => {
+  try {
+    const { session, params: { messageId } } = req;
+    let message = messageStore.get(messageId);
+
+    if (!message) {
+      const dbResult = getMessageById.get({ message_id: messageId, session_id: session.id });
+      if (dbResult && dbResult.raw_message_data) {
+        message = JSON.parse(dbResult.raw_message_data);
+        messageStore.set(messageId, message);
+      }
+    }
+
+    if (!message) {
+      logger.warn(`[${session.id}] Media download request for unknown messageId: ${messageId}`);
+      return res.status(404).json({ success: false, error: 'Media not found.' });
+    }
+
+    logger.info(`[${session.id}] Preparing to download media for message: ${messageId}`);
+
+    // La opción 'reuploadRequest' se elimina porque no somos el cliente original.
+    // Esto es muy probablemente la causa de que el proceso se congele.
+    const buffer = await downloadMediaMessage(message, 'buffer', {}, {
+      logger,
+      // reuploadRequest: session.sock.updateMediaMessage // <-- ELIMINADO
+    });
+
+    logger.info(`[${session.id}] Download complete for message: ${messageId}. Size: ${buffer.length}`);
+    
+    const type = getType(message.message);
+    const content = message.message[`${type}Message`] || message.message;
+    
+    res.set('Content-Type', content.mimetype || 'application/octet-stream');
+    res.send(buffer);
+  } catch (e) {
+    logger.error({ err: e }, `[${session.id}] /media/${req.params.messageId} download failed`);
+    res.status(500).json({ success: false, error: 'Failed to retrieve media from provider.' });
   }
 });
 

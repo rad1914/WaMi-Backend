@@ -1,6 +1,7 @@
 // @path: database.js
 import Database from 'better-sqlite3';
 import dotenv from 'dotenv';
+import { logger } from './logger.js';
 
 dotenv.config();
 
@@ -23,13 +24,24 @@ db.exec(`
     mimetype TEXT,
     quoted_message_id TEXT,
     quoted_message_text TEXT,
-    media_sha256 TEXT
+    media_sha256 TEXT,
+    raw_message_data TEXT
   )
 `);
+
+try {
+  db.prepare(`SELECT raw_message_data FROM messages LIMIT 1`).get();
+} catch (e) {
+  if (e.message.includes('no such column')) {
+    logger.info('Migrating database: adding raw_message_data column to messages table...');
+    db.exec(`ALTER TABLE messages ADD COLUMN raw_message_data TEXT`);
+  }
+}
 
 db.exec(`CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_message_timestamp ON messages (timestamp);`);
 
+// ++ BLOQUES FALTANTES EN TU ARCHIVO ANTERIOR ++
 db.exec(`
   CREATE TABLE IF NOT EXISTS chats (
     session_id TEXT NOT NULL,
@@ -51,12 +63,13 @@ db.exec(`
     PRIMARY KEY (message_id, sender_jid)
   )
 `);
+// ++ FIN DE BLOQUES FALTANTES ++
 
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
-    (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text, media_sha256)
+    (message_id, session_id, jid, text, type, isOutgoing, status, timestamp, participant, sender_name, media_url, mimetype, quoted_message_id, quoted_message_text, media_sha256, raw_message_data)
   VALUES
-    (@message_id, @session_id, @jid, @text, @type, @isOutgoing, @status, @timestamp, @participant, @sender_name, @media_url, @mimetype, @quoted_message_id, @quoted_message_text, @media_sha256)
+    (@message_id, @session_id, @jid, @text, @type, @isOutgoing, @status, @timestamp, @participant, @sender_name, @media_url, @mimetype, @quoted_message_id, @quoted_message_text, @media_sha256, @raw_message_data)
 `);
 
 const updateMessageStatus = db.prepare(`
@@ -98,6 +111,10 @@ const getSingleMessage = db.prepare(`
     ) as reactions
   FROM messages m
   WHERE m.message_id = @message_id
+`);
+
+const getMessageById = db.prepare(`
+    SELECT raw_message_data FROM messages WHERE message_id = @message_id AND session_id = @session_id LIMIT 1
 `);
 
 const getOldestMessageDetails = db.prepare(`
@@ -168,6 +185,7 @@ export {
     getMessagesByJid,
     getReactionsForMessages,
     getSingleMessage,
+    getMessageById,
     getOldestMessageDetails,
     getMessageKeyDetails,
     upsertChat,
