@@ -84,7 +84,6 @@ async function processMessages(session, messages, isHistorical = false) {
       quoted_message_id: content?.contextInfo?.stanzaId || content?.key?.id || null,
       quoted_message_text: getText(content?.contextInfo?.quotedMessage) || null,
       media_sha256,
-      // ++ AÑADIR: Guarda el objeto de mensaje completo como JSON
       raw_message_data: JSON.stringify(m)
     };
     messageInserts.push(msgData);
@@ -148,7 +147,6 @@ async function processMessages(session, messages, isHistorical = false) {
   return messages.length;
 }
 
-// ... El resto del archivo no cambia ...
 export function normalizeJid(input) {
   try {
     const j = jidNormalizedUser(input);
@@ -238,6 +236,24 @@ export async function createWhatsappSession(session, onLogout) {
         session.io.emit('whatsapp-message-status-update', { id: key.id, status });
       }
     }
+  });
+
+  sock.ev.on('chats.update', updates => {
+    runInTransaction(() => {
+      for (const update of updates) {
+        if (update.id && update.name) {
+          upsertChat.run({
+            session_id: session.id,
+            jid: update.id,
+            name: update.name,
+            is_group: isGroup(update.id) ? 1 : 0,
+            last_message: null,
+            last_message_timestamp: null,
+            increment_unread: null,
+          });
+        }
+      }
+    });
   });
 
   sock.ev.on('messages.reaction', reactions => {

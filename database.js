@@ -41,7 +41,6 @@ try {
 db.exec(`CREATE INDEX IF NOT EXISTS idx_media_sha256 ON messages (media_sha256);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_message_timestamp ON messages (timestamp);`);
 
-// ++ BLOQUES FALTANTES EN TU ARCHIVO ANTERIOR ++
 db.exec(`
   CREATE TABLE IF NOT EXISTS chats (
     session_id TEXT NOT NULL,
@@ -63,7 +62,6 @@ db.exec(`
     PRIMARY KEY (message_id, sender_jid)
   )
 `);
-// ++ FIN DE BLOQUES FALTANTES ++
 
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages
@@ -132,10 +130,10 @@ const upsertChat = db.prepare(`
     INSERT INTO chats (session_id, jid, name, is_group, last_message, last_message_timestamp, unread_count)
     VALUES (@session_id, @jid, @name, @is_group, @last_message, @last_message_timestamp, @increment_unread)
     ON CONFLICT(session_id, jid) DO UPDATE SET
-        name = COALESCE(excluded.name, name),
-        last_message = excluded.last_message,
-        last_message_timestamp = excluded.last_message_timestamp,
-        unread_count = unread_count + excluded.unread_count
+        name = IIF(excluded.name IS NOT NULL, excluded.name, name),
+        last_message = IIF(excluded.last_message IS NOT NULL, excluded.last_message, last_message),
+        last_message_timestamp = IIF(excluded.last_message_timestamp IS NOT NULL, excluded.last_message_timestamp, last_message_timestamp),
+        unread_count = IIF(excluded.unread_count IS NOT NULL, excluded.unread_count, unread_count)
 `);
 
 const getChats = db.prepare(`
