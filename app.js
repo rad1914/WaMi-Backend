@@ -10,9 +10,10 @@ import helmet from 'helmet';
 import cors from 'cors';
 
 import { createWhatsappSession } from './whatsapp-service.js';
-import { db } from './database.js';
+import { db, deleteSessionData } from './database.js';
 import { logger } from './logger.js';
 import errorHandler from './middleware/errorHandler.js';
+import { runCleanupWorker } from './workers/CleanupWorker.js';
 
 import sessionRoutes from './routes/session.js';
 import chatRoutes from './routes/chat.js';
@@ -21,30 +22,31 @@ import mediaRoutes from './routes/media.js';
 
 dotenv.config();
 
-// === Initialization ===
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3007;
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './auth_sessions';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const SESSION_CLEANUP_INTERVAL = process.env.SESSION_CLEANUP_INTERVAL || 900000;
 
 export const sessions = new Map();
 
-// === Ensure sessions directory exists ===
+const WORKERS_DIR = path.join(path.resolve(), 'workers');
+if (!fs.existsSync(WORKERS_DIR)) {
+  fs.mkdirSync(WORKERS_DIR, { recursive: true });
+}
+
 if (!fs.existsSync(SESSIONS_DIR)) {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
-// === Middleware ===
 app.use(helmet());
 app.use(express.json());
 app.use(cors({ origin: CORS_ORIGIN }));
 
-// === Attach Socket.IO ===
 const io = new Server(server, { cors: { origin: CORS_ORIGIN } });
 app.set('io', io);
 
-// === Logging middleware ===
 app.use((req, _, next) => {
   const sid = req.headers.authorization?.split(' ')[1] || 'N/A';
   const logBody = req.path.includes('/send/media')
@@ -55,29 +57,41 @@ app.use((req, _, next) => {
   next();
 });
 
-// === Socket.IO connection handler ===
+io.use((socket, next) => {
+  const sid = socket.handshake.auth.token;
+  if (sid && sessions.has(sid)) {
+    return next();
+  }
+  logger.warn(`Rejected socket via middleware with invalid or missing SID: ${sid}`);
+  next(new Error('Invalid session ID'));
+});
+
 io.on('connection', socket => {
   const sid = socket.handshake.auth?.token;
+  const session = sessions.get(sid);
 
-  if (sid && sessions.has(sid)) {
-    socket.join(sid);
-    logger.info(`[${sid}] Socket connected`);
-  } else {
-    logger.warn(`Rejected socket with invalid or missing SID: ${sid}`);
+  if (!session) {
+    logger.error(`[${sid}] Connection handler reached with invalid session. Disconnecting.`);
     socket.disconnect(true);
+    return;
+  }
+
+  socket.join(sid);
+  logger.info(`[${sid}] Socket connected`);
+
+  if (session.isAuthenticated) {
+    logger.info(`[${sid}] Session is already authenticated, notifying new socket.`);
+    socket.emit('authenticated');
   }
 });
 
-// === Routes ===
 app.use('/session', sessionRoutes);
 app.use(chatRoutes);
 app.use(messageRoutes);
 app.use(mediaRoutes);
 
-// === Error handler (last middleware) ===
 app.use(errorHandler);
 
-// === Cleanup function for logout ===
 export const createOnLogout = (id) => () => {
   logger.info(`Session ${id} logged out`);
 
@@ -85,11 +99,17 @@ export const createOnLogout = (id) => () => {
   if (fs.existsSync(sessionPath)) {
     fs.rmSync(sessionPath, { recursive: true, force: true });
   }
+  
+  try {
+    deleteSessionData(id);
+    logger.info(`[${id}] Deleted session data from database.`);
+  } catch (err) {
+    logger.error(`[${id}] Failed to delete session data from database:`, err);
+  }
 
   sessions.delete(id);
 };
 
-// === Restore sessions from filesystem ===
 function restoreSessions() {
   try {
     const ids = fs.readdirSync(SESSIONS_DIR)
@@ -115,18 +135,22 @@ function restoreSessions() {
   }
 }
 
-// === Start Server ===
 const listener = server.listen(PORT, () => {
   logger.info(`Server listening on port ${PORT}`);
-  restoreSessions();
+  setInterval(() => {
+    runCleanupWorker({ sessions, SESSIONS_DIR, createOnLogout, logger });
+  }, SESSION_CLEANUP_INTERVAL);
 });
 
-// === Graceful shutdown ===
 const gracefulShutdown = (signal) => {
   logger.info(`${signal} received. Shutting down...`);
 
   listener.close(() => {
-    sessions.forEach(s => s.sock?.end(new Error('Server shutting down')));
+    sessions.forEach(s => {
+      // MODIFICADO: Añadir una bandera para indicar que el cierre es intencional
+      s.isShuttingDown = true;
+      s.sock?.end(new Error('Server shutting down'));
+    });
 
     db.close(err => {
       if (err) {
@@ -136,5 +160,7 @@ const gracefulShutdown = (signal) => {
     });
   });
 };
+
+restoreSessions();
 
 ['SIGINT', 'SIGTERM'].forEach(sig => process.on(sig, () => gracefulShutdown(sig)));

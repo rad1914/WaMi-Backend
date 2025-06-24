@@ -7,7 +7,6 @@ dotenv.config();
 
 const db = new Database(process.env.SQLITE_PATH || './chat.db');
 
-// Safe DB initialization with logging
 try {
   db.exec(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -56,7 +55,6 @@ try {
   throw err;
 }
 
-// Migration: add missing column
 try {
   db.prepare(`SELECT raw_message_data FROM messages LIMIT 1`).get();
 } catch (e) {
@@ -67,7 +65,6 @@ try {
   }
 }
 
-// Message queries
 const insertMessage = db.prepare(`
   INSERT OR IGNORE INTO messages (
     message_id, session_id, jid, text, type, isOutgoing, status, timestamp,
@@ -159,7 +156,16 @@ const deleteOldReactions = db.prepare(`
   )
 `);
 
-// Chat queries
+const deleteSessionData = db.transaction((sessionId) => {
+  const stmts = [
+    db.prepare('DELETE FROM messages WHERE session_id = ?'),
+    db.prepare('DELETE FROM chats WHERE session_id = ?'),
+  ];
+  for (const stmt of stmts) {
+    stmt.run(sessionId);
+  }
+});
+
 const upsertChat = db.prepare(`
   INSERT INTO chats (
     session_id, jid, name, is_group, last_message, last_message_timestamp, unread_count
@@ -190,7 +196,6 @@ const resetChatUnreadCount = db.prepare(`
   UPDATE chats SET unread_count = 0 WHERE session_id = @session_id AND jid = @jid
 `);
 
-// Reaction queries
 const upsertReaction = db.prepare(`
   INSERT OR REPLACE INTO reactions (message_id, sender_jid, emoji)
   VALUES (@message_id, @sender_jid, @emoji)
@@ -200,15 +205,12 @@ const deleteReaction = db.prepare(`
   DELETE FROM reactions WHERE message_id = @message_id AND sender_jid = @sender_jid
 `);
 
-// Transaction wrapper
 const runInTransaction = (fn) => db.transaction(fn)();
 
-// Export all
 export {
   db,
   runInTransaction,
 
-  // Messages
   insertMessage,
   updateMessageStatus,
   getMessagesByJid,
@@ -219,13 +221,12 @@ export {
   getMessageKeyDetails,
   findMessageBySha256,
   deleteOldMessages,
+  deleteSessionData,
 
-  // Chats
   upsertChat,
   getChats,
   resetChatUnreadCount,
 
-  // Reactions
   upsertReaction,
   deleteReaction,
   deleteOldReactions

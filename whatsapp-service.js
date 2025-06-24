@@ -1,3 +1,4 @@
+// @path: whatsapp-service.js
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -211,25 +212,30 @@ export async function createWhatsappSession(session, onLogout) {
         }
 
         if (connection === 'close') {
+          // MODIFICADO: Comprobar si el cierre fue por un reinicio del servidor
+          if (session.isShuttingDown) {
+            logger.info(`[${session.id}] Connection closed due to server shutdown. No action taken.`);
+            return; // Salir para no borrar la sesión
+          }
+          
           session.isAuthenticated = false;
           const code = lastDisconnect?.error?.output?.statusCode;
           logger.warn(`[${session.id}] WhatsApp connection closed. Code: ${code}`);
           session.io.emit('disconnected');
 
-          const shouldRetry =
-            code !== DisconnectReason.loggedOut &&
-            code !== DisconnectReason.connectionReplaced &&
-            code !== DisconnectReason.badSession &&
-            code !== DisconnectReason.invalidSession;
+          const isUnrecoverable = [
+            DisconnectReason.loggedOut,
+            DisconnectReason.connectionReplaced,
+            DisconnectReason.badSession,
+            DisconnectReason.invalidSession,
+          ].includes(code);
 
-          if (shouldRetry) {
-            logger.info(`[${session.id}] Retrying connection in 10 seconds...`);
-            setTimeout(() => createWhatsappSession(session, onLogout), 10000);
-          } else if (code === DisconnectReason.loggedOut) {
-            logger.info(`[${session.id}] Session logged out. Cleaning up.`);
+          if (isUnrecoverable) {
+            logger.info(`[${session.id}] Unrecoverable session error (Code: ${code}). Cleaning up session.`);
             onLogout();
           } else {
-            logger.error(`[${session.id}] Unrecoverable connection error. Not retrying. Code: ${code}`);
+            logger.info(`[${session.id}] Retrying connection in 10 seconds...`);
+            setTimeout(() => createWhatsappSession(session, onLogout), 10000);
           }
         }
       } catch (e) {
