@@ -18,7 +18,7 @@ async function autoCleanup() {
 
   try {
     const cleanupDb = db.transaction(() => {
-      // Primero borra reacciones de mensajes que serán borrados
+
       const reactionResult = deleteOldReactions.run({ cutoffTimestamp });
       const messageResult = deleteOldMessages.run({ cutoffTimestamp });
       if (messageResult.changes > 0 || reactionResult.changes > 0) {

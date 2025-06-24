@@ -61,8 +61,7 @@ router.post('/send/reaction',
         id: messageId,
         fromMe: !!messageDetails.isOutgoing,
       };
-      
-      // FIX: Add participant to the key for incoming group messages
+
       if (!key.fromMe && messageDetails.participant) {
         key.participant = messageDetails.participant;
       }

@@ -19,7 +19,7 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
+  limits: { fileSize: 100 * 1024 * 1024 },
 });
 
 const sendPlaceholder = (res) => {
@@ -48,7 +48,6 @@ router.get('/avatar/:jid', auth, async (req, res) => {
   }
 });
 
-// ++ CAMBIOS APLICADOS AQUÍ ++
 router.get('/media/:messageId', auth, async (req, res) => {
   try {
     const { session, params: { messageId } } = req;
@@ -69,11 +68,9 @@ router.get('/media/:messageId', auth, async (req, res) => {
 
     logger.info(`[${session.id}] Preparing to download media for message: ${messageId}`);
 
-    // La opción 'reuploadRequest' se elimina porque no somos el cliente original.
-    // Esto es muy probablemente la causa de que el proceso se congele.
     const buffer = await downloadMediaMessage(message, 'buffer', {}, {
       logger,
-      // reuploadRequest: session.sock.updateMediaMessage // <-- ELIMINADO
+
     });
 
     logger.info(`[${session.id}] Download complete for message: ${messageId}. Size: ${buffer.length}`);
