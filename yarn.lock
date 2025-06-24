@@ -987,10 +987,6 @@ ecc-jsbn@0.0.1:
     jsbn "git+https://github.com/rynomad/jsbn.git"
 
 "ecc-qj@git+https://github.com/rynomad/ecc.git":
-  version "0.0.1"
-  resolved "git+ssh://git@github.com/rynomad/ecc.git#a8c599363dab87a5c95274338d863233f00f7c4a"
-  dependencies:
-    nan "^1.6.2"
 
 ee-first@1.1.1:
   version "1.1.1"
@@ -1696,7 +1692,8 @@ js-yaml@^4.1.0:
 
 "jsbn@git+https://github.com/rynomad/jsbn.git":
   version "0.0.0"
-  resolved "git+ssh://git@github.com/rynomad/jsbn.git#bb522b0124f75424f89d49446c40a87111942c7b"
+  resolved "git+ssh://git@github.com/rynomad/jsbn.git"
+  integrity sha512-LaozQWsj+rjKPrsDgXxnnJUL6x/fWncqrf+ICRxYtcnCgEMRJJBcD+QhrGrxI8rjvtOG5XtmKqdvPLiBrliQzA==
 
 json-buffer@3.0.1:
   version "3.0.1"
@@ -1969,11 +1966,6 @@ music-metadata@^7.12.3:
     media-typer "^1.1.0"
     strtok3 "^6.3.0"
     token-types "^4.2.1"
-
-nan@^1.6.2:
-  version "1.9.0"
-  resolved "https://registry.npmjs.org/nan/-/nan-1.9.0.tgz"
-  integrity sha512-piQCQCuCG3N+cx9/izRvyYZsr7EbTgOxEJACZ5Ag1jhPHT2cCiMKiOARYkRTkkCJOgD6HAhVxuR/m4hp/F54pQ==
 
 napi-build-utils@^2.0.0:
   version "2.0.0"
