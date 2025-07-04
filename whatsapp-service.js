@@ -1,4 +1,4 @@
-// @path: whatsapp-service.js
+
 import {
   makeWASocket,
   useMultiFileAuthState,
@@ -58,20 +58,20 @@ function extractMediaDetails(content, key, type) {
 
 async function processMessages(session, messages, isHistorical = false) {
   const messageInserts = [];
-  const chatUpsertParams = new Map();
+  const chatMap = new Map();
 
   for (const m of messages) {
     try {
-      if (!m?.message || !m?.key) continue;
+      if (!m?.message || !m?.key?.id) continue;
       const type = getType(m.message);
-      if (!m.key.id || type === 'reaction') continue;
+      if (type === 'reaction') continue;
 
       messageStore.set(m.key.id, m);
 
       const content = m.message[`${type}Message`] || m.message;
       const { media_url, mimetype, media_sha256 } = extractMediaDetails(content, m.key, type);
 
-      const msgData = {
+      const msg = {
         message_id: m.key.id,
         session_id: session.id,
         jid: m.key.remoteJid,
@@ -87,32 +87,32 @@ async function processMessages(session, messages, isHistorical = false) {
         quoted_message_id: content?.contextInfo?.stanzaId || content?.key?.id || null,
         quoted_message_text: getText(content?.contextInfo?.quotedMessage) || null,
         media_sha256,
-        raw_message_data: JSON.stringify(m)
+        raw_message_data: JSON.stringify(m),
       };
 
-      messageInserts.push(msgData);
+      messageInserts.push(msg);
 
       if (!isHistorical) {
-        const isGroupChat = isGroup(msgData.jid);
+        const isGroupChat = isGroup(msg.jid);
         const name = isGroupChat
-          ? (session.sock.store?.chats?.[msgData.jid]?.name || msgData.jid.split('@')[0])
-          : msgData.sender_name || msgData.jid.split('@')[0];
+          ? session.sock.store?.chats?.[msg.jid]?.name || msg.jid.split('@')[0]
+          : msg.sender_name || msg.jid.split('@')[0];
 
-        const current = chatUpsertParams.get(msgData.jid) || { last_message_timestamp: 0, unread_count: 0 };
-        const unreadIncrement = current.unread_count + (msgData.isOutgoing ? 0 : 1);
+        const prev = chatMap.get(msg.jid) || { last_message_timestamp: 0, unread_count: 0 };
+        const unread = prev.unread_count + (msg.isOutgoing ? 0 : 1);
 
-        if (msgData.timestamp >= current.last_message_timestamp) {
-          chatUpsertParams.set(msgData.jid, {
-            session_id: msgData.session_id,
-            jid: msgData.jid,
+        if (msg.timestamp >= prev.last_message_timestamp) {
+          chatMap.set(msg.jid, {
+            session_id: msg.session_id,
+            jid: msg.jid,
             name,
             is_group: isGroupChat ? 1 : 0,
-            last_message: msgData.text || msgData.type,
-            last_message_timestamp: msgData.timestamp,
-            unread_count: unreadIncrement,
+            last_message: msg.text || msg.type,
+            last_message_timestamp: msg.timestamp,
+            unread_count: unread,
           });
         } else {
-          current.unread_count = unreadIncrement;
+          prev.unread_count = unread;
         }
       }
     } catch (err) {
@@ -122,8 +122,8 @@ async function processMessages(session, messages, isHistorical = false) {
 
   if (messageInserts.length) {
     runInTransaction(() => {
-      for (const msg of messageInserts) insertMessage.run(msg);
-      for (const chat of chatUpsertParams.values()) upsertChat.run(chat);
+      messageInserts.forEach(insertMessage.run);
+      [...chatMap.values()].forEach(upsertChat.run);
     });
 
     if (!isHistorical) {
@@ -133,7 +133,7 @@ async function processMessages(session, messages, isHistorical = false) {
         text: m.text,
         type: m.type,
         isOutgoing: m.isOutgoing,
-        status: 'received',
+        status: m.status,
         timestamp: m.timestamp,
         name: m.sender_name,
         media_url: m.media_url,
@@ -196,13 +196,17 @@ export async function createWhatsappSession(session, onLogout) {
 
     sock.ev.on('connection.update', async ({ connection, qr: qrCode, lastDisconnect }) => {
       try {
-        if (qrCode) {
-          logger.info(`[${session.id}] QR code received, generating data URL...`);
-          const qrDataURL = await qr.toDataURL(qrCode);
-          session.latestQR = qrDataURL;
-          session.io.emit('qr', qrDataURL);
-          logger.info(`[${session.id}] QR code sent to client.`);
-        }
+if (qrCode) {
+  logger.info(`[${session.id}] QR code received, generating data URL...`);
+  const qrDataURL = await qr.toDataURL(qrCode);
+  session.latestQR = qrDataURL;
+
+  setTimeout(() => {
+    session.io.emit('qr', qrDataURL);
+    logger.info(`[${session.id}] QR code sent to client (after delay).`);
+  }, 3000); // 3-second delay
+}
+
 
         if (connection === 'open') {
           session.isAuthenticated = true;
@@ -308,7 +312,6 @@ export async function createWhatsappSession(session, onLogout) {
           updates.set(key.id, key.remoteJid);
         }
       });
-
       for (const [msgId, jid] of updates.entries()) {
         const message = getSingleMessage.get({ message_id: msgId });
         if (message) {
