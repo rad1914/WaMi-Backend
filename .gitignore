@@ -1,0 +1,23 @@
+# Node.js dependencies
+node_modules/
+auth_sessions/
+media/
+
+# Databases
+chat.db
+
+# Logs
+*.log
+
+# Environment files (if you use them)
+.env
+
+# OS and editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Lock files (optional: if using yarn only, ignore npm's; or vice versa)
+package-lock.json
+# yarn.lock  # uncomment if you want to ignore Yarn lockfile instead
