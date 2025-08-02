@@ -1,14 +1,15 @@
-// @path: client/client.js
-import {
+import { Boom } from '@hapi/boom'
+import { store } from '../store/store.js'
+import logger from '../utils/logger.js'
+import baileys from '@whiskeysockets/baileys'
+
+const {
   makeWASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   DisconnectReason
-} from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
-import store from '../store/store.js'
-import logger from '../utils/logger.js'
+} = baileys
 
 let clientSocket = null
 

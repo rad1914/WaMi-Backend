@@ -1,14 +1,14 @@
-// @path: store/store.js
-import {
+import path from 'path'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import baileys from '@whiskeysockets/baileys'
+
+const {
   makeInMemoryStore,
   useMultiFileAuthState,
   makeCacheableSignalKeyStore
-} from '@whiskeysockets/baileys'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import path from 'path'
+} = baileys
 
 const STORE_PATH = path.resolve('./auth/store.json')
-
 const store = makeInMemoryStore({})
 
 setInterval(() => {
@@ -46,4 +46,4 @@ export const initAuthStore = async () => {
   return { authState, signalKeyStore }
 }
 
-export default store
+export { store }
