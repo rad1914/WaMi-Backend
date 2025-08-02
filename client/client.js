@@ -1,5 +1,4 @@
 // @path: client/client.js
-
 import {
   makeWASocket,
   useMultiFileAuthState,

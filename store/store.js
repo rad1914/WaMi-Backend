@@ -1,5 +1,4 @@
 // @path: store/store.js
-
 import {
   makeInMemoryStore,
   useMultiFileAuthState,

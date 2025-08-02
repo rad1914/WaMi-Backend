@@ -1,5 +1,4 @@
 // @path: store/store.js
-
 import {
   makeInMemoryStore,
   useMultiFileAuthState,
@@ -233,7 +232,6 @@ const findMessage = async (jid, msgId) => {
   return messages?.messages?.find((m) => m.key?.id === msgId)
 }
 // @path: routes.js
-
 import { Router } from 'express'
 import authRoutes from './auth/auth.routes.js'
 import messageRoutes from './message/message.routes.js'
@@ -370,7 +368,6 @@ export const logout = async (req, res) => {
   }
 }
 // @path: index.js
-
 import express from 'express'
 import dotenv from 'dotenv'
 import cors from 'cors'
@@ -394,7 +391,6 @@ app.listen(PORT, async () => {
   await initClient()
 })
 // @path: utils/logger.js
-
 import pino from 'pino'
 
 const isDev = process.env.NODE_ENV !== 'production'
@@ -415,7 +411,6 @@ const logger = pino({
 
 export default logger
 // @path: client/client.js
-
 import {
   makeWASocket,
   useMultiFileAuthState,
