@@ -1,4 +1,4 @@
-// src/routes.js
+// @path: routes.js
 
 import { Router } from 'express'
 import authRoutes from './auth/auth.routes.js'

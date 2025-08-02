@@ -1,3 +1,4 @@
+// @path: message/message.routes.js
 import { Router } from 'express'
 import {
   send,

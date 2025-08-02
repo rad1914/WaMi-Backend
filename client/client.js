@@ -1,4 +1,4 @@
-// src/client/client.js
+// @path: client/client.js
 
 import {
   makeWASocket,
@@ -22,17 +22,13 @@ export const initClient = async () => {
     browser: Browsers.macOS('BaileysAPI')
   })
 
-  // bind Baileys' in-memory store
   store.bind(sock.ev)
 
-  // persist credentials
   sock.ev.on('creds.update', saveCreds)
 
-  // connection updates (handles QR, reconnect, etc.)
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      // your QR handler—show or serve this string/image
-      console.log('📱 Scan this QR code:', qr)
+      console.log('📱 Scan QR Code:', qr)
     }
 
     if (connection === 'close') {
@@ -40,23 +36,24 @@ export const initClient = async () => {
       logger.warn(`Disconnected with code ${code}`)
 
       if (code !== DisconnectReason.loggedOut) {
-        logger.info('Reconnecting to WhatsApp…')
+        logger.info('Reconnecting to WhatsApp...')
         initClient()
       } else {
-        logger.error('Logged out of WhatsApp—please re-authenticate.')
+        logger.error('Logged out. Please re-authenticate.')
       }
     }
 
     if (connection === 'open') {
-      logger.info('✅ WhatsApp connection open.')
+      logger.info('✅ Connected to WhatsApp Web')
     }
   })
 
   clientSocket = sock
 }
 
-// getter for the socket
 export const getClient = () => {
-  if (!clientSocket) throw new Error('Client not initialized—call initClient() first.')
+  if (!clientSocket) {
+    throw new Error('WhatsApp client not initialized. Call initClient() first.')
+  }
   return clientSocket
 }

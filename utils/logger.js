@@ -1,4 +1,4 @@
-// src/utils/logger.js
+// @path: utils/logger.js
 
 import pino from 'pino'
 

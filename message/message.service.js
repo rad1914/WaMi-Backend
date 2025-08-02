@@ -1,3 +1,4 @@
+// @path: message/message.service.js
 import { getClient, initClient } from '../client/client.js'
 import {
   makeWASocket,
@@ -93,7 +94,6 @@ export const editMessage = async ({ jid, messageId, newText }) => {
   })
 }
 
-// utility for quoted replies
 const findMessage = async (jid, msgId) => {
   const messages = await clientSocket?.store?.loadMessages(jid, 50)
   return messages?.messages?.find((m) => m.key?.id === msgId)

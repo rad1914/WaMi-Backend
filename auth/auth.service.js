@@ -1,3 +1,4 @@
+// @path: auth/auth.service.js
 import { getClient, initClient } from '../client/client.js'
 import {
   makeWASocket,

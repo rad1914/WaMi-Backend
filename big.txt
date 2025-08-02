@@ -1,0 +1,475 @@
+// @path: store/store.js
+
+import {
+  makeInMemoryStore,
+  useMultiFileAuthState,
+  makeCacheableSignalKeyStore
+} from '@whiskeysockets/baileys'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import path from 'path'
+
+const STORE_PATH = path.resolve('./auth/store.json')
+
+const store = makeInMemoryStore({})
+
+setInterval(() => {
+  writeFileSync(
+    STORE_PATH,
+    JSON.stringify(
+      {
+        chats: store.chats,
+        contacts: store.contacts
+      },
+      (_, val) => (val instanceof Map ? [...val.entries()] : val),
+      2
+    )
+  )
+}, 10000)
+
+if (existsSync(STORE_PATH)) {
+  const data = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
+  if (data.chats) store.chats = new Map(data.chats)
+  if (data.contacts) store.contacts = new Map(data.contacts)
+}
+
+let authState, saveCreds
+
+export const initAuthStore = async () => {
+  const { state, saveCreds: _saveCreds } = await useMultiFileAuthState('auth')
+  authState = state
+  saveCreds = _saveCreds
+
+  const signalKeyStore = makeCacheableSignalKeyStore(
+    state.signalKeyStore || {},
+    updated => saveCreds(updated)
+  )
+
+  return { authState, signalKeyStore }
+}
+
+export default store
+// @path: message/message.routes.js
+import { Router } from 'express'
+import {
+  send,
+  reply,
+  forward,
+  react,
+  remove,
+  edit
+} from './message.controller.js'
+
+const router = Router()
+
+router.post('/send', send)
+router.post('/reply', reply)
+router.post('/forward', forward)
+router.post('/react', react)
+router.post('/delete', remove)
+router.post('/edit', edit)
+
+export default router
+// @path: message/message.controller.js
+import {
+  sendMessage,
+  replyToMessage,
+  forwardMessage,
+  reactToMessage,
+  deleteMessage,
+  editMessage
+} from './message.service.js'
+
+export const send = async (req, res) => {
+  try {
+    const response = await sendMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const reply = async (req, res) => {
+  try {
+    const response = await replyToMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const forward = async (req, res) => {
+  try {
+    const response = await forwardMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const react = async (req, res) => {
+  try {
+    const response = await reactToMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const remove = async (req, res) => {
+  try {
+    const response = await deleteMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const edit = async (req, res) => {
+  try {
+    const response = await editMessage(req.body)
+    res.status(200).json(response)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+// @path: message/message.service.js
+import { getClient, initClient } from '../client/client.js'
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  Browsers,
+  makeCacheableSignalKeyStore,
+  DisconnectReason,
+  jidNormalizedUser,
+  jidDecode,
+} from '@whiskeysockets/baileys';
+export const sendMessage = async ({ jid, type, content, options }) => {
+  if (!jid || !type || !content) {
+    throw new Error('jid, type and content are required.')
+  }
+
+  const messageContent = {}
+
+  switch (type) {
+    case 'text':
+      messageContent.text = content
+      break
+    case 'image':
+      messageContent.image = { url: content }
+      break
+    case 'video':
+      messageContent.video = { url: content }
+      break
+    case 'audio':
+      messageContent.audio = { url: content, mimetype: 'audio/ogg; codecs=opus' }
+      break
+    case 'document':
+      messageContent.document = { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' }
+      break
+    case 'sticker':
+      messageContent.sticker = { url: content }
+      break
+    default:
+      throw new Error(`Unsupported message type: ${type}`)
+  }
+
+  return await clientSocket.sendMessage(jid, messageContent, options)
+}
+
+export const replyToMessage = async ({ jid, content, quotedMessageId, type = 'text' }) => {
+  const quoted = await findMessage(jid, quotedMessageId)
+  if (!quoted) throw new Error('Quoted message not found.')
+
+  return await clientSocket.sendMessage(jid, { [type]: content }, { quoted })
+}
+
+export const forwardMessage = async ({ to, message }) => {
+  if (!to || !message) throw new Error('to and message required.')
+  return await clientSocket.relayMessage(to, message, { messageId: message.key?.id })
+}
+
+export const reactToMessage = async ({ jid, messageId, emoji }) => {
+  const reactionMsg = {
+    react: {
+      text: emoji,
+      key: {
+        remoteJid: jid,
+        id: messageId,
+        fromMe: false
+      }
+    }
+  }
+  return await clientSocket.sendMessage(jid, reactionMsg)
+}
+
+export const deleteMessage = async ({ jid, messageId, fromMe = true }) => {
+  return await clientSocket.sendMessage(jid, {
+    delete: {
+      remoteJid: jid,
+      fromMe,
+      id: messageId
+    }
+  })
+}
+
+export const editMessage = async ({ jid, messageId, newText }) => {
+  const msgKey = {
+    remoteJid: jid,
+    fromMe: true,
+    id: messageId
+  }
+
+  return await clientSocket.sendMessage(jid, {
+    edit: {
+      message: { conversation: newText },
+      key: msgKey
+    }
+  })
+}
+
+const findMessage = async (jid, msgId) => {
+  const messages = await clientSocket?.store?.loadMessages(jid, 50)
+  return messages?.messages?.find((m) => m.key?.id === msgId)
+}
+// @path: routes.js
+
+import { Router } from 'express'
+import authRoutes from './auth/auth.routes.js'
+import messageRoutes from './message/message.routes.js'
+
+const router = Router()
+
+router.use('/auth', authRoutes)
+router.use('/message', messageRoutes)
+
+export default router
+// @path: auth/auth.service.js
+import { getClient, initClient } from '../client/client.js'
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  Browsers,
+  makeCacheableSignalKeyStore,
+  DisconnectReason,
+  jidNormalizedUser,
+  jidDecode,
+} from '@whiskeysockets/baileys';
+
+let qrCode = null
+let pairingCode = null
+let isLoggedIn = false
+
+export const getQRCode = async () => {
+  if (!clientSocket?.ws) {
+    await initClient()
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
+
+    clientSocket.ev.once('connection.update', (update) => {
+      if (update.qr) {
+        clearTimeout(timeout)
+        qrCode = update.qr
+        resolve(qrCode)
+      } else if (update.connection === 'open') {
+        clearTimeout(timeout)
+        isLoggedIn = true
+        resolve('already connected')
+      }
+    })
+  })
+}
+
+export const getPairingCode = async () => {
+  if (!clientSocket?.ws) {
+    await initClient()
+  }
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      const code = await clientSocket.requestPairingCode()
+      pairingCode = code
+      resolve(code)
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+export const getAuthStatus = async () => {
+  return !!(clientSocket?.user?.id || isLoggedIn)
+}
+
+export const logoutSession = async () => {
+  if (clientSocket?.logout) {
+    await clientSocket.logout()
+    isLoggedIn = false
+  }
+}
+// @path: auth/auth.routes.js
+import { Router } from 'express'
+import {
+  qrLogin,
+  pairingLogin,
+  checkAuth,
+  logout
+} from './auth.controller.js'
+
+const router = Router()
+
+router.get('/qr', qrLogin)
+router.post('/pairing', pairingLogin)
+router.get('/status', checkAuth)
+router.delete('/logout', logout)
+
+export default router
+// @path: auth/auth.controller.js
+import {
+  getQRCode,
+  getPairingCode,
+  getAuthStatus,
+  logoutSession
+} from './auth.service.js'
+
+export const qrLogin = async (req, res) => {
+  try {
+    const qr = await getQRCode()
+    res.status(200).json({ qr })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const pairingLogin = async (req, res) => {
+  try {
+    const code = await getPairingCode()
+    res.status(200).json({ pairingCode: code })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const checkAuth = async (req, res) => {
+  try {
+    const status = await getAuthStatus()
+    res.status(200).json({ authenticated: status })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const logout = async (req, res) => {
+  try {
+    await logoutSession()
+    res.status(200).json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+// @path: index.js
+
+import express from 'express'
+import dotenv from 'dotenv'
+import cors from 'cors'
+import morgan from 'morgan'
+import routes from './routes.js'
+import { initClient } from './client/client.js'
+
+dotenv.config()
+
+const app = express()
+
+app.use(cors())
+app.use(express.json({ limit: '50mb' }))
+app.use(morgan('dev'))
+
+app.use('/api', routes)
+
+const PORT = process.env.PORT || 3000
+app.listen(PORT, async () => {
+  console.log(`✅ API running on http://localhost:${PORT}/api`)
+  await initClient()
+})
+// @path: utils/logger.js
+
+import pino from 'pino'
+
+const isDev = process.env.NODE_ENV !== 'production'
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  ...(isDev && {
+    transport: {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'SYS:standard',
+        ignore: 'pid,hostname'
+      }
+    }
+  })
+})
+
+export default logger
+// @path: client/client.js
+
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  Browsers,
+  DisconnectReason
+} from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
+import store from '../store/store.js'
+import logger from '../utils/logger.js'
+
+let clientSocket = null
+
+export const initClient = async () => {
+  const { state, saveCreds } = await useMultiFileAuthState('auth')
+
+  const sock = makeWASocket({
+    version: await fetchLatestBaileysVersion(),
+    auth: state,
+    browser: Browsers.macOS('BaileysAPI')
+  })
+
+  store.bind(sock.ev)
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      console.log('📱 Scan QR Code:', qr)
+    }
+
+    if (connection === 'close') {
+      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
+      logger.warn(`Disconnected with code ${code}`)
+
+      if (code !== DisconnectReason.loggedOut) {
+        logger.info('Reconnecting to WhatsApp...')
+        initClient()
+      } else {
+        logger.error('Logged out. Please re-authenticate.')
+      }
+    }
+
+    if (connection === 'open') {
+      logger.info('✅ Connected to WhatsApp Web')
+    }
+  })
+
+  clientSocket = sock
+}
+
+export const getClient = () => {
+  if (!clientSocket) {
+    throw new Error('WhatsApp client not initialized. Call initClient() first.')
+  }
+  return clientSocket
+}

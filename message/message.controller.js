@@ -1,3 +1,4 @@
+// @path: message/message.controller.js
 import {
   sendMessage,
   replyToMessage,

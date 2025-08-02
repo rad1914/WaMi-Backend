@@ -1,3 +1,4 @@
+// @path: auth/auth.controller.js
 import {
   getQRCode,
   getPairingCode,
