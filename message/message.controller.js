@@ -1,18 +1,11 @@
 // @path: message/message.controller.js
+
 import * as service from './message.service.js'
+import { wrapController } from '../utils/helpers.js'
 
-const handler = fn => async (req, res) => {
-  try {
-    const result = await service[fn](req.body)
-    res.status(200).json(result)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const send    = handler('sendMessage')
-export const reply   = handler('replyToMessage')
-export const forward = handler('forwardMessage')
-export const react   = handler('reactToMessage')
-export const remove  = handler('deleteMessage')
-export const edit    = handler('editMessage')
+export const send    = wrapController(body => service.sendMessage(body))
+export const reply   = wrapController(body => service.replyToMessage(body))
+export const forward = wrapController(body => service.forwardMessage(body))
+export const react   = wrapController(body => service.reactToMessage(body))
+export const remove  = wrapController(body => service.deleteMessage(body))
+export const edit    = wrapController(body => service.editMessage(body))

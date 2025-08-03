@@ -1,57 +1,56 @@
 // @path: store/store.js
+
 import path from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
+import { registerSocketEvents } from '../utils/helpers.js'
+import { initAuthState } from '../utils/sessionInit.js'
 
-const { makeInMemoryStore, useMultiFileAuthState, makeCacheableSignalKeyStore } = baileys
+const { makeInMemoryStore, makeCacheableSignalKeyStore } = baileys
 const STORE_PATH = './.sessions/store.json'
-const store = makeInMemoryStore({})
+export const store = makeInMemoryStore({})
 
-function setupPersistence() {
-  if (setupPersistence._started) return
-  setupPersistence._started = true
+let persistenceStarted = false
+const startPersistence = () => {
+  if (persistenceStarted) return
+  persistenceStarted = true
 
   setInterval(() => {
     const chats   = store.chats instanceof Map ? [...store.chats.entries()] : []
     const contacts = store.contacts || {}
-
     const payload = { chats, contacts }
+
     try {
       writeFileSync(STORE_PATH, JSON.stringify(payload, null, 2))
     } catch (err) {
-      
       console.warn('⚠️ Error al escribir store.json:', err)
     }
-  }, 10000)
+  }, 10_000)
 }
 
 if (existsSync(STORE_PATH)) {
   try {
-    const data = JSON.parse(readFileSync(STORE_PATH))
-    if (Array.isArray(data.chats)) {
-      store.chats = new Map(data.chats)
-    }
-    if (data.contacts && typeof data.contacts === 'object') {
-      store.contacts = data.contacts
-    }
+    const { chats, contacts } = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
+    if (Array.isArray(chats)) store.chats = new Map(chats)
+    if (contacts && typeof contacts === 'object') store.contacts = contacts
   } catch (err) {
     console.warn('⚠️ Error al leer o parsear store.json:', err)
   }
 }
 
-export const initAuthStore = async () => {
-  const { state, saveCreds } = await useMultiFileAuthState('auth')
-  const signalKeyStore = makeCacheableSignalKeyStore(state.signalKeyStore || {}, saveCreds)
-  return { authState: state, signalKeyStore }
-}
-
 const originalBind = store.bind.bind(store)
 store.bind = ev => {
   originalBind(ev)
-  setupPersistence()
+  startPersistence()
 }
 
-export { store }
+export const initAuthStore = async () => {
+  const { state, saveCreds } = await initAuthState('auth')
+  const signalKeyStore = makeCacheableSignalKeyStore(state.signalKeyStore || {}, saveCreds)
+
+  registerSocketEvents(store, 'shared', saveCreds, initAuthStore)
+  return { authState: state, signalKeyStore }
+}
 // @path: message/message.routes.js
 import { Router } from 'express'
 import {
@@ -74,23 +73,16 @@ router.post('/edit', edit)
 
 export default router
 // @path: message/message.controller.js
+
 import * as service from './message.service.js'
+import { wrapController } from '../utils/helpers.js'
 
-const handler = fn => async (req, res) => {
-  try {
-    const result = await service[fn](req.body)
-    res.status(200).json(result)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const send    = handler('sendMessage')
-export const reply   = handler('replyToMessage')
-export const forward = handler('forwardMessage')
-export const react   = handler('reactToMessage')
-export const remove  = handler('deleteMessage')
-export const edit    = handler('editMessage')
+export const send    = wrapController(body => service.sendMessage(body))
+export const reply   = wrapController(body => service.replyToMessage(body))
+export const forward = wrapController(body => service.forwardMessage(body))
+export const react   = wrapController(body => service.reactToMessage(body))
+export const remove  = wrapController(body => service.deleteMessage(body))
+export const edit    = wrapController(body => service.editMessage(body))
 // @path: message/message.service.js
 import { getSession } from '../client/session.manager.js'
 
@@ -220,29 +212,19 @@ router.get('/status', checkAuth)
 
 export default router
 // @path: auth/auth.controller.js
+
 import {
   createSession as svcCreate,
   removeSession as svcRemove,
   getQRCode as svcGetQr,
   checkAuth as svcCheckAuth
 } from './auth.service.js'
+import { wrapController } from '../utils/helpers.js'
 
-const respond = fn => async (req, res) => {
-  try {
-    const data = await fn(req)
-    res.json(data)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const createSession = respond(async req => svcCreate())
-
-export const removeSession = respond(async req => svcRemove(req.body))
-
-export const getQRCode = respond(async req => svcGetQr(req.query))
-
-export const checkAuth = respond(async req => svcCheckAuth(req.query))
+export const createSession = wrapController(async () => svcCreate())
+export const removeSession = wrapController(async body => svcRemove(body))
+export const getQRCode     = wrapController(async query => svcGetQr(query))
+export const checkAuth     = wrapController(async query => svcCheckAuth(query))
 // @path: index.js
 import express from 'express'
 import dotenv from 'dotenv'
@@ -266,6 +248,46 @@ app.listen(PORT, async () => {
   console.log(`✅ API running on http://localhost:${PORT}/api`)
   await initClient()
 })
+// @path: utils/helpers.js
+
+import { Boom } from '@hapi/boom'
+import { DisconnectReason } from '@whiskeysockets/baileys'
+import logger from '../utils/logger.js'
+
+export const wrapController = serviceFn => async (req, res) => {
+  try {
+    const data = await serviceFn(req.method === 'GET' ? req.query : req.body)
+    res.status(200).json(data)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', update => {
+    const { connection, lastDisconnect, qr } = update
+
+    if (qr) {
+      console.log(`[${sessionId}] QR: ${qr}`)
+    }
+
+    if (connection === 'close') {
+      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
+      logger.warn(`[${sessionId}] Disconnected (${code})`)
+      if (code !== DisconnectReason.loggedOut) {
+        reinitFn(sessionId)
+      } else {
+        logger.error(`[${sessionId}] Logged out`)
+      }
+    }
+
+    if (connection === 'open') {
+      logger.info(`[${sessionId}] Connected`)
+    }
+  })
+}
 // @path: utils/logger.js
 import pino from 'pino'
 
@@ -286,18 +308,22 @@ const logger = pino({
 })
 
 export default logger
+// @path: utils/sessionInit.js
+
+import { useMultiFileAuthState } from '@whiskeysockets/baileys'
+
+export const initAuthState = async sessionPath => {
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
+  return { state, saveCreds }
+}
 // @path: client/session.manager.js
-import {
-  makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason,
-  makeInMemoryStore,
-  Browsers
-} from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
+
 import path from 'path'
 import fs from 'fs'
+import { makeWASocket, fetchLatestBaileysVersion, makeInMemoryStore, Browsers } from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
+import { registerSocketEvents } from '../utils/helpers.js'
+import { initAuthState } from '../utils/sessionInit.js'
 
 const sessions = new Map()
 
@@ -309,33 +335,22 @@ export const getSession = sessionId => {
 
 export const initSession = async sessionId => {
   if (sessions.has(sessionId)) return sessions.get(sessionId)
+
   const store = makeInMemoryStore({})
   const sessionPath = path.resolve('.sessions', sessionId)
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
+  const { state, saveCreds } = await initAuthState(sessionPath)
   const { version } = await fetchLatestBaileysVersion()
+
   const sock = makeWASocket({
     version,
     auth: state,
     browser: Browsers.macOS('MultiBaileys')
   })
+
   store.bind(sock.ev)
-  sock.ev.on('creds.update', saveCreds)
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) console.log(`[${sessionId}] QR: ${qr}`)
-    if (connection === 'close') {
-      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      console.warn(`[${sessionId}] Disconnected (${code})`)
-      if (code !== DisconnectReason.loggedOut) {
-        initSession(sessionId)
-      } else {
-        sessions.delete(sessionId)
-        console.error(`[${sessionId}] Logged out`)
-      }
-    }
-    if (connection === 'open') {
-      console.info(`[${sessionId}] Connected`)
-    }
-  })
+
+  registerSocketEvents(sock, sessionId, saveCreds, initSession)
+
   sessions.set(sessionId, sock)
   return sock
 }
@@ -350,21 +365,18 @@ export const deleteSession = async sessionId => {
 
 export const getSessions = () => Array.from(sessions.keys())
 // @path: client/client.js
+
 import { Boom } from '@hapi/boom'
+import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys'
+import { registerSocketEvents } from '../utils/helpers.js'
+import { initAuthState } from '../utils/sessionInit.js'
 import { store } from '../store/store.js'
 import logger from '../utils/logger.js'
-import {
-  makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  Browsers,
-  DisconnectReason
-} from '@whiskeysockets/baileys'
 
 let clientSocket = null
 
 export const initClient = async () => {
-  const { state, saveCreds } = await useMultiFileAuthState('auth')
+  const { state, saveCreds } = await initAuthState('auth')
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
@@ -374,29 +386,7 @@ export const initClient = async () => {
   })
 
   store.bind(sock.ev)
-
-  sock.ev.on('creds.update', saveCreds)
-
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) console.log('📱 Scan QR Code:', qr)
-
-    if (connection === 'close') {
-      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      logger.warn(`Disconnected with code ${code}`)
-
-      if (code !== DisconnectReason.loggedOut) {
-        logger.info('Reconnecting...')
-        initClient()
-      } else {
-        logger.error('Logged out.')
-      }
-    }
-
-    if (connection === 'open') {
-      logger.info('✅ Connected')
-    }
-  })
-
+  registerSocketEvents(sock, 'shared', saveCreds, initClient)
   clientSocket = sock
 }
 

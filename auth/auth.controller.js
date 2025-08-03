@@ -1,24 +1,14 @@
 // @path: auth/auth.controller.js
+
 import {
   createSession as svcCreate,
   removeSession as svcRemove,
   getQRCode as svcGetQr,
   checkAuth as svcCheckAuth
 } from './auth.service.js'
+import { wrapController } from '../utils/helpers.js'
 
-const respond = fn => async (req, res) => {
-  try {
-    const data = await fn(req)
-    res.json(data)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const createSession = respond(async req => svcCreate())
-
-export const removeSession = respond(async req => svcRemove(req.body))
-
-export const getQRCode = respond(async req => svcGetQr(req.query))
-
-export const checkAuth = respond(async req => svcCheckAuth(req.query))
+export const createSession = wrapController(async () => svcCreate())
+export const removeSession = wrapController(async body => svcRemove(body))
+export const getQRCode     = wrapController(async query => svcGetQr(query))
+export const checkAuth     = wrapController(async query => svcCheckAuth(query))
