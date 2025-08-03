@@ -21,4 +21,4 @@ Thumbs.db
 # Lock files (optional: if using yarn only, ignore npm's; or vice versa)
 package-lock.json
 # yarn.lock  # uncomment if you want to ignore Yarn lockfile instead
-sessions
+.sessions

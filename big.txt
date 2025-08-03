@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
 
 const { makeInMemoryStore, useMultiFileAuthState, makeCacheableSignalKeyStore } = baileys
-const STORE_PATH = './auth/store.json'
+const STORE_PATH = './sessions/store.json'
 const store = makeInMemoryStore({})
 
 setInterval(() => {
@@ -60,26 +60,26 @@ const handler = fn => async (req, res) => {
   }
 }
 
-export const send = handler('sendMessage')
-export const reply = handler('replyToMessage')
+export const send    = handler('sendMessage')
+export const reply   = handler('replyToMessage')
 export const forward = handler('forwardMessage')
-export const react = handler('reactToMessage')
-export const remove = handler('deleteMessage')
-export const edit = handler('editMessage')
+export const react   = handler('reactToMessage')
+export const remove  = handler('deleteMessage')
+export const edit    = handler('editMessage')
 // @path: message/message.service.js
 import { getSession } from '../client/session.manager.js'
 
 const getPayload = (type, content, options) => {
   const payloads = {
-    text: { text: content },
-    image: { image: { url: content } },
-    video: { video: { url: content } },
-    audio: { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
+    text:     { text: content },
+    image:    { image: { url: content } },
+    video:    { video: { url: content } },
+    audio:    { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
     document: { document: { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' } },
-    sticker: { sticker: { url: content } },
-    react: { react: content },
-    delete: { delete: content },
-    edit: { edit: content }
+    sticker:  { sticker: { url: content } },
+    react:    { react: content },
+    delete:   { delete: content },
+    edit:     { edit: content }
   }
   return payloads[type]
 }
@@ -144,11 +144,20 @@ export const getQRCode = async () => {
   const client = await ensureClient()
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-    client.ev.once('connection.update', (u) => {
-      clearTimeout(timeout)
-      if (u.qr) resolve(qrCode = u.qr)
-      else if (u.connection === 'open') resolve(isLoggedIn = true)
-    })
+
+    const handler = (u) => {
+      if (u.qr) {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve(qrCode = u.qr)
+      } else if (u.connection === 'open') {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve(isLoggedIn = true)
+      }
+    }
+
+    client.ev.on('connection.update', handler)
   })
 }
 
@@ -226,11 +235,20 @@ export const getQRCode = (req, res) => respond(res, async () => {
 
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-    client.ev.once('connection.update', update => {
-      clearTimeout(timeout)
-      if (update.qr) resolve({ qr: update.qr })
-      else if (update.connection === 'open') resolve({ success: true })
-    })
+
+    const handler = (update) => {
+      if (update.qr) {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve({ qr: update.qr })
+      } else if (update.connection === 'open') {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve({ success: true })
+      }
+    }
+
+    client.ev.on('connection.update', handler)
   })
 })
 
@@ -283,7 +301,14 @@ const logger = pino({
 
 export default logger
 // @path: client/session.manager.js
-import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeInMemoryStore, Browsers } from '@whiskeysockets/baileys'
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+  makeInMemoryStore,
+  Browsers
+} from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import path from 'path'
 import fs from 'fs'
@@ -301,7 +326,7 @@ export const initSession = async (sessionId) => {
   if (sessions.has(sessionId)) return sessions.get(sessionId)
 
   const store = makeInMemoryStore({})
-  const sessionPath = path.resolve('auth/sessions', sessionId)
+  const sessionPath = path.resolve('sessions', sessionId)
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
   const { version } = await fetchLatestBaileysVersion()
 

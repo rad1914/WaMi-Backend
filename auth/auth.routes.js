@@ -1,4 +1,3 @@
-// @path: auth/auth.routes.js
 import { Router } from 'express'
 import {
   createSession,
