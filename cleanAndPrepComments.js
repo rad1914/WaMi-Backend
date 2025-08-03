@@ -7,7 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const cwd = process.cwd();
 const scriptRelPath = relative(cwd, __filename).replace(/\\/g, '/');
 
-// Utilities
 function toPosixPath(path) {
   return path.replace(/\\/g, '/');
 }
@@ -49,7 +48,6 @@ async function processFile(filePath) {
   const pathCommentRegex = buildExactPathCommentRegex(commentLine);
   const header = content.slice(0, 500);
 
-  // Prepend path comment if not already present
   if (!pathCommentRegex.test(header)) {
     if (fileType === 'xml' && content.startsWith('<?xml')) {
       const endDecl = content.indexOf('?>');
@@ -68,21 +66,19 @@ async function processFile(filePath) {
     console.log(`Skipping (already has @path): ${relPath}`);
   }
 
-  // Remove unwanted comments
   if (fileType === 'code') {
     content = content
       .replace(/\/\*[\s\S]*?\*\//g, m => m.includes('@path:') ? m : '')
       .replace(/^\s*\/\/.*$/gm, line => line.includes('@path:') ? line : '')
       .replace(/([^:"'\n])\/\/(?!.*@path:).*$/gm, (_, p) => p.trimEnd())
-      // Remove [cite: 1], [cite: 1, 2], etc.
       .replace(/\[cite\s*:\s*\d+(?:\s*,\s*\d+)*\]/g, '')
-      // Remove [cite], [cite_start], [cite_end]
-      .replace(/\[cite(?:_start|_end)?\]/g, '');
+      .replace(/\[cite(?:_start|_end)?\]/g, '')
+      .replace(/\[span_\d+\]\(start_span\)/g, '')
+      .replace(/\[span_\d+\]\(end_span\)/g, '');
   } else if (fileType === 'xml') {
     content = content.replace(/<!--[\s\S]*?-->/g, m => m.includes('@path:') ? m : '');
   }
 
-  // Normalize spacing
   content = content.replace(/\n{3,}/g, '\n\n');
   if (!content.endsWith('\n')) content += '\n';
 
@@ -108,7 +104,6 @@ async function main() {
     return;
   }
 
-  // Process files in parallel (limited concurrency could be added here)
   await Promise.allSettled(entries.map(processFile));
 
   console.log('All done!');

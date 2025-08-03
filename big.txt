@@ -1,14 +1,15 @@
 // @path: store/store.js
-import {
+import path from 'path'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
+import baileys from '@whiskeysockets/baileys'
+
+const {
   makeInMemoryStore,
   useMultiFileAuthState,
   makeCacheableSignalKeyStore
-} from '@whiskeysockets/baileys'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import path from 'path'
+} = baileys
 
 const STORE_PATH = path.resolve('./auth/store.json')
-
 const store = makeInMemoryStore({})
 
 setInterval(() => {
@@ -28,7 +29,7 @@ setInterval(() => {
 if (existsSync(STORE_PATH)) {
   const data = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
   if (data.chats) store.chats = new Map(data.chats)
-  if (data.contacts) store.contacts = new Map(data.contacts)
+  if (data.contacts) store.contacts = data.contacts
 }
 
 let authState, saveCreds
@@ -39,14 +40,15 @@ export const initAuthStore = async () => {
   saveCreds = _saveCreds
 
   const signalKeyStore = makeCacheableSignalKeyStore(
-    state.signalKeyStore || {},
+    state.signalKeyStore ||
+{},
     updated => saveCreds(updated)
   )
 
   return { authState, signalKeyStore }
 }
 
-export default store
+export { store }
 // @path: message/message.routes.js
 import { Router } from 'express'
 import {
@@ -411,16 +413,18 @@ const logger = pino({
 
 export default logger
 // @path: client/client.js
-import {
+import { Boom } from '@hapi/boom'
+import { store } from '../store/store.js'
+import logger from '../utils/logger.js'
+import baileys from '@whiskeysockets/baileys'
+
+const {
   makeWASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   DisconnectReason
-} from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
-import store from '../store/store.js'
-import logger from '../utils/logger.js'
+} = baileys
 
 let clientSocket = null
 

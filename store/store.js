@@ -1,3 +1,4 @@
+// @path: store/store.js
 import path from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
@@ -28,7 +29,7 @@ setInterval(() => {
 if (existsSync(STORE_PATH)) {
   const data = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
   if (data.chats) store.chats = new Map(data.chats)
-  if (data.contacts) store.contacts = new Map(data.contacts)
+  if (data.contacts) store.contacts = data.contacts
 }
 
 let authState, saveCreds
@@ -39,7 +40,8 @@ export const initAuthStore = async () => {
   saveCreds = _saveCreds
 
   const signalKeyStore = makeCacheableSignalKeyStore(
-    state.signalKeyStore || {},
+    state.signalKeyStore ||
+{},
     updated => saveCreds(updated)
   )
 

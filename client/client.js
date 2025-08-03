@@ -1,3 +1,4 @@
+// @path: client/client.js
 import { Boom } from '@hapi/boom'
 import { store } from '../store/store.js'
 import logger from '../utils/logger.js'
@@ -16,8 +17,10 @@ let clientSocket = null
 export const initClient = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
 
+  const { version } = await fetchLatestBaileysVersion()
+
   const sock = makeWASocket({
-    version: await fetchLatestBaileysVersion(),
+    version, // ✅ ahora es un array
     auth: state,
     browser: Browsers.macOS('BaileysAPI')
   })
@@ -27,9 +30,7 @@ export const initClient = async () => {
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      console.log('📱 Scan QR Code:', qr)
-    }
+    if (qr) console.log('📱 Scan QR Code:', qr)
 
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
@@ -50,6 +51,7 @@ export const initClient = async () => {
 
   clientSocket = sock
 }
+
 
 export const getClient = () => {
   if (!clientSocket) {
