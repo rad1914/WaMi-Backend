@@ -1,3 +1,4 @@
+<!-- @path: index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,6 +67,10 @@
             border: 1px solid #ccc;
             border-radius: var(--border-radius);
         }
+        input:disabled {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
         button {
             background-color: var(--primary-color);
             color: white;
@@ -77,15 +82,19 @@
             margin-right: 5px;
             margin-top: 5px;
         }
-        button:hover {
+        button:hover:not(:disabled) {
             background-color: #0056b3;
         }
+        button:disabled {
+            background-color: #a0a0a0;
+            cursor: not-allowed;
+        }
         button.danger { background-color: var(--danger-color); }
-        button.danger:hover { background-color: #c82333; }
+        button.danger:hover:not(:disabled) { background-color: #c82333; }
         button.success { background-color: var(--success-color); }
-        button.success:hover { background-color: #218838; }
+        button.success:hover:not(:disabled) { background-color: #218838; }
         button.secondary { background-color: var(--secondary-color); }
-        button.secondary:hover { background-color: #5a6268; }
+        button.secondary:hover:not(:disabled) { background-color: #5a6268; }
         #qr-code {
             max-width: 250px;
             margin-top: 15px;
@@ -114,13 +123,13 @@
     <div class="card">
         <h2>Authentication</h2>
         <div class="form-group">
-            <label for="sessionId">Session ID</label>
-            <input type="text" id="sessionId" placeholder="Enter a unique session ID">
+            <label for="sessionIdDisplay">Current Session ID</label>
+            <input type="text" id="sessionIdDisplay" placeholder="Click 'Create Session' to start" disabled>
         </div>
         <button id="createSessionBtn">Create Session</button>
-        <button id="getQrBtn">Get QR</button>
-        <button id="checkStatusBtn" class="secondary">Check Status</button>
-        <button id="removeSessionBtn" class="danger">Remove Session</button>
+        <button id="getQrBtn" disabled>Get QR</button>
+        <button id="checkStatusBtn" class="secondary" disabled>Check Status</button>
+        <button id="removeSessionBtn" class="danger" disabled>Remove Session</button>
         <div id="auth-status"></div>
         <div id="qr-display"></div>
     </div>
@@ -144,15 +153,19 @@
                         <option value="sticker">Sticker URL</option>
                     </select>
                 </div>
+                 <div class="form-group" id="url-group" style="display: none;">
+                    <label for="contentUrl">Content URL</label>
+                    <input type="text" id="contentUrl" placeholder="http://example.com/file.jpg">
+                </div>
             </div>
             <div>
                 <div class="form-group">
                     <label for="messageId">Message ID (for Reply, Edit, React, Delete)</label>
                     <input type="text" id="messageId" placeholder="The ID of the target message">
                 </div>
-                 <div class="form-group" id="url-group" style="display: none;">
-                    <label for="contentUrl">Content URL</label>
-                    <input type="text" id="contentUrl" placeholder="http://example.com/file.jpg">
+                <div class="form-group">
+                    <label for="forwardJid">Forward to JID</label>
+                    <input type="text" id="forwardJid" placeholder="e.g., 0987654321@s.whatsapp.net">
                 </div>
             </div>
         </div>
@@ -160,10 +173,15 @@
             <label for="messageContent">Content</label>
             <textarea id="messageContent" rows="3" placeholder="Type your message, emoji, or new text here..."></textarea>
         </div>
+        <div class="form-group">
+            <label for="forwardMessageObject">Message Object to Forward (JSON)</label>
+            <textarea id="forwardMessageObject" rows="4" placeholder="Paste the full message JSON object here to forward it."></textarea>
+        </div>
         <button id="sendBtn" class="success">Send</button>
         <button id="replyBtn">Reply</button>
         <button id="editBtn">Edit</button>
         <button id="reactBtn">React</button>
+        <button id="forwardBtn">Forward</button>
         <button id="deleteBtn" class="danger">Delete</button>
     </div>
 
@@ -173,10 +191,13 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'http://192.168.1.68:3000/api';
+        const API_BASE_URL = 'http://localhost:3000/api'; // Adjusted for local development
 
-        // DOM Elements
-        const sessionIdInput = document.getElementById('sessionId');
+        // --- State ---
+        let currentSessionId = null;
+
+        // --- DOM Elements ---
+        const sessionIdDisplay = document.getElementById('sessionIdDisplay');
         const createSessionBtn = document.getElementById('createSessionBtn');
         const getQrBtn = document.getElementById('getQrBtn');
         const checkStatusBtn = document.getElementById('checkStatusBtn');
@@ -198,20 +219,52 @@
         const editBtn = document.getElementById('editBtn');
         const reactBtn = document.getElementById('reactBtn');
         const deleteBtn = document.getElementById('deleteBtn');
+        const forwardBtn = document.getElementById('forwardBtn');
+        const forwardJidInput = document.getElementById('forwardJid');
+        const forwardMessageObjectInput = document.getElementById('forwardMessageObject');
 
-        // Utility function to make API calls
+        // --- UI Update Functions ---
+        function setSessionActive(sessionId) {
+            currentSessionId = sessionId;
+            sessionIdDisplay.value = sessionId;
+            getQrBtn.disabled = false;
+            checkStatusBtn.disabled = false;
+            removeSessionBtn.disabled = false;
+            messagingSection.style.display = 'block';
+            authStatusDiv.innerHTML = '';
+            qrDisplayDiv.innerHTML = '';
+        }
+
+        function setSessionInactive() {
+            setAuthStatus(`Session '${currentSessionId}' removed.`, 'success');
+            currentSessionId = null;
+            sessionIdDisplay.value = '';
+            sessionIdDisplay.placeholder = "Click 'Create Session' to start";
+            getQrBtn.disabled = true;
+            checkStatusBtn.disabled = true;
+            removeSessionBtn.disabled = true;
+            messagingSection.style.display = 'none';
+            qrDisplayDiv.innerHTML = '';
+        }
+        
+        // --- API & Helper Functions ---
         async function fetchApi(endpoint, options = {}) {
-            const sessionId = sessionIdInput.value;
-            if (!sessionId && !endpoint.includes('/auth/create')) {
-                alert('Please enter a Session ID.');
+            if (!currentSessionId && !endpoint.includes('/auth/create')) {
+                alert('Please create a session first.');
                 return;
             }
 
-            // Add sessionId to query params for GET requests
             let url = `${API_BASE_URL}${endpoint}`;
-            if (options.method === 'GET' || !options.method) {
-                const params = new URLSearchParams({ sessionId });
+            const isGetRequest = options.method === 'GET' || !options.method;
+
+            // Add sessionId to query params for GET requests, otherwise add to body
+            if (isGetRequest) {
+                const params = new URLSearchParams({ sessionId: currentSessionId });
                 url += `?${params}`;
+            } else if (options.body) {
+                const body = JSON.parse(options.body);
+                body.sessionId = currentSessionId;
+                options.body = JSON.stringify(body);
             }
 
             try {
@@ -237,25 +290,20 @@
             authStatusDiv.style.marginTop = '10px';
         }
         
-        // Event Listeners
+        // --- Event Listeners ---
         messageTypeSelect.addEventListener('change', () => {
             const selectedType = messageTypeSelect.value;
             urlGroup.style.display = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType) ? 'block' : 'none';
         });
 
+        // Authentication Actions
         createSessionBtn.addEventListener('click', async () => {
-            const sessionId = sessionIdInput.value;
-            if (!sessionId) {
-                alert('Session ID is required to create a session.');
-                return;
-            }
-            const result = await fetchApi('/auth/create', {
-                method: 'POST',
-                body: JSON.stringify({ sessionId })
-            });
+            const result = await fetchApi('/auth/create', { method: 'POST', body: JSON.stringify({}) });
             if (result && result.sessionId) {
+                setSessionActive(result.sessionId);
                 setAuthStatus(`Session '${result.sessionId}' created. Click 'Get QR' to authenticate.`, 'success');
-                messagingSection.style.display = 'block';
+            } else {
+                setAuthStatus('Failed to create session.', 'danger');
             }
         });
 
@@ -270,7 +318,7 @@
                     qrDisplayDiv.innerHTML = '';
                     setAuthStatus('Session is already connected!', 'success');
                 } else {
-                     qrDisplayDiv.innerHTML = '';
+                     qrDisplayDiv.innerHTML = 'Failed to get QR code. Maybe the session is already connected?';
                 }
             }
         });
@@ -283,38 +331,36 @@
                 setAuthStatus(statusMessage, statusType);
             }
         });
-        
+
         removeSessionBtn.addEventListener('click', async () => {
              if (!confirm('Are you sure you want to remove this session?')) return;
+             // The body only needs the sessionId, which fetchApi will add
              const result = await fetchApi('/auth/remove', {
                  method: 'DELETE',
-                 body: JSON.stringify({ sessionId: sessionIdInput.value })
+                 body: JSON.stringify({}) 
              });
              if (result && result.success) {
-                setAuthStatus(`Session '${sessionIdInput.value}' removed.`, 'success');
-                messagingSection.style.display = 'none';
-                qrDisplayDiv.innerHTML = '';
-                sessionIdInput.value = '';
+                setSessionInactive();
              }
         });
 
         // Messaging Actions
         sendBtn.addEventListener('click', () => {
             const type = messageTypeSelect.value;
-            const content = type === 'text' ? messageContentInput.value : contentUrlInput.value;
+            const isUrlBased = ['image', 'video', 'audio', 'document', 'sticker'].includes(type);
+            const content = isUrlBased ? contentUrlInput.value : messageContentInput.value;
+            
             const body = {
-                sessionId: sessionIdInput.value,
                 jid: jidInput.value,
                 type: type,
                 content: content,
-                options: {} // Add any extra options if needed
+                options: {}
             };
             fetchApi('/message/send', { method: 'POST', body: JSON.stringify(body) });
         });
 
         replyBtn.addEventListener('click', () => {
             const body = {
-                sessionId: sessionIdInput.value,
                 jid: jidInput.value,
                 content: messageContentInput.value,
                 quotedMessageId: messageIdInput.value
@@ -324,31 +370,44 @@
         
         editBtn.addEventListener('click', () => {
              const body = {
-                sessionId: sessionIdInput.value,
                 jid: jidInput.value,
                 messageId: messageIdInput.value,
                 newText: messageContentInput.value,
             };
             fetchApi('/message/edit', { method: 'POST', body: JSON.stringify(body) });
         });
-
+        
         reactBtn.addEventListener('click', () => {
             const body = {
-                sessionId: sessionIdInput.value,
                 jid: jidInput.value,
                 messageId: messageIdInput.value,
                 emoji: messageContentInput.value,
             };
             fetchApi('/message/react', { method: 'POST', body: JSON.stringify(body) });
         });
-
+        
         deleteBtn.addEventListener('click', () => {
             const body = {
-                sessionId: sessionIdInput.value,
                 jid: jidInput.value,
                 messageId: messageIdInput.value,
             };
             fetchApi('/message/delete', { method: 'POST', body: JSON.stringify(body) });
+        });
+
+        forwardBtn.addEventListener('click', () => {
+            let messageObject;
+            try {
+                messageObject = JSON.parse(forwardMessageObjectInput.value);
+            } catch (e) {
+                alert('Invalid JSON in "Message Object to Forward" field.');
+                return;
+            }
+
+            const body = {
+                to: forwardJidInput.value,
+                message: messageObject
+            };
+            fetchApi('/message/forward', { method: 'POST', body: JSON.stringify(body) });
         });
     });
 </script>

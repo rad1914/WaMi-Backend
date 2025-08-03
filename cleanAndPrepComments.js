@@ -1,5 +1,5 @@
 import { promises as fs } from "fs";
-import { resolve, relative, extname, posix } from "path";
+import { resolve, relative, extname } from "path";
 import fg from "fast-glob";
 import { fileURLToPath } from "url";
 
@@ -15,6 +15,7 @@ function getFileType(ext) {
   ext = ext.toLowerCase();
   if (ext === '.js' || ext === '.kt') return 'code';
   if (ext === '.xml') return 'xml';
+  if (ext === '.html') return 'html';
   return null;
 }
 
@@ -41,7 +42,7 @@ async function processFile(filePath) {
     return;
   }
 
-  let commentLine = fileType === 'xml'
+  let commentLine = (fileType === 'xml' || fileType === 'html')
     ? `<!-- @path: ${relPath} -->\n`
     : `// @path: ${relPath}\n`;
 
@@ -49,7 +50,7 @@ async function processFile(filePath) {
   const header = content.slice(0, 500);
 
   if (!pathCommentRegex.test(header)) {
-    if (fileType === 'xml' && content.startsWith('<?xml')) {
+    if ((fileType === 'xml' || fileType === 'html') && content.startsWith('<?xml')) {
       const endDecl = content.indexOf('?>');
       if (endDecl !== -1) {
         const before = content.slice(0, endDecl + 2);
@@ -68,18 +69,28 @@ async function processFile(filePath) {
 
   if (fileType === 'code') {
     content = content
+      // Mantener sólo los bloques /* ... */ si contienen @path:
       .replace(/\/\*[\s\S]*?\*\//g, m => m.includes('@path:') ? m : '')
+      // Mantener sólo las líneas // si contienen @path:
       .replace(/^\s*\/\/.*$/gm, line => line.includes('@path:') ? line : '')
+      // Eliminar comentarios inline // que no contengan @path:
       .replace(/([^:"'\n])\/\/(?!.*@path:).*$/gm, (_, p) => p.trimEnd())
+      // Eliminar marcas de cita
       .replace(/\[cite\s*:\s*\d+(?:\s*,\s*\d+)*\]/g, '')
       .replace(/\[cite(?:_start|_end)?\]/g, '')
-      .replace(/\[span_\d+\]\(start_span\)/g, '')
-      .replace(/\[span_\d+\]\(end_span\)/g, '');
-  } else if (fileType === 'xml') {
-    content = content.replace(/<!--[\s\S]*?-->/g, m => m.includes('@path:') ? m : '');
+      // Eliminar bloques span (inline o multilínea) junto a su contenido
+      .replace(/\[span_\d+\]\(start_span\)[\s\S]*?\[span_\d+\]\(end_span\)/g, '')
+      // Quitar líneas que hayan quedado vacías
+      .replace(/^\s*$/gm, '');
+  } else if (fileType === 'xml' || fileType === 'html') {
+    content = content
+      // Mantener sólo los comentarios <!-- ... --> que contengan @path:
+      .replace(/<!--[\s\S]*?-->/g, m => m.includes('@path:') ? m : '');
   }
 
+  // Reducir saltos de línea excesivos
   content = content.replace(/\n{3,}/g, '\n\n');
+  // Asegurar salto final
   if (!content.endsWith('\n')) content += '\n';
 
   try {
@@ -91,7 +102,7 @@ async function processFile(filePath) {
 }
 
 async function main() {
-  const pattern = process.argv[2] || '**/*.{js,kt,xml}';
+  const pattern = process.argv[2] || '**/*.{js,kt,xml,html}';
   let entries = await fg(pattern, {
     dot: true,
     ignore: ['node_modules/**'],
