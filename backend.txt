@@ -1,3 +1,24 @@
+// @path: middlewares/checkSession.js
+
+export function checkSession(req, res, next) {
+  const sessionId = req.headers['x-session-id']
+
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required' })
+  }
+
+  try {
+
+    import('../client/session.manager.js').then(({ getSession }) => {
+      getSession(sessionId)
+      next()
+    }).catch(err => {
+      return res.status(401).json({ error: 'Invalid sessionId' })
+    })
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid sessionId' })
+  }
+}
 // @path: store/store.js
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
@@ -49,7 +70,9 @@ export const initAuthStore = async () => {
   return { authState: state, signalKeyStore }
 }
 // @path: message/message.routes.js
+
 import { Router } from 'express'
+import { checkSession } from '../middlewares/checkSession.js'
 import {
   send,
   reply,
@@ -60,6 +83,8 @@ import {
 } from './message.controller.js'
 
 const router = Router()
+
+router.use(checkSession)
 
 router.post('/send', send)
 router.post('/reply', reply)
@@ -246,7 +271,6 @@ app.listen(PORT, async () => {
   await initClient()
 })
 // @path: utils/helpers.js
-
 import { Boom } from '@hapi/boom'
 import { DisconnectReason } from '@whiskeysockets/baileys'
 import logger from './logger.js'
@@ -256,7 +280,12 @@ export const wrapController = fn => async (req, res) => {
     const input = req.method === 'GET' ? req.query : req.body
     res.json(await fn(input))
   } catch (err) {
-    res.status(500).json({ error: err.message })
+
+    const payload = { error: err.message }
+    if (process.env.NODE_ENV === 'development') {
+      payload.stack = err.stack
+    }
+    res.status(500).json(payload)
   }
 }
 
@@ -311,7 +340,11 @@ export const initAuthState = async sessionPath => {
 
 import path from 'path'
 import fs from 'fs'
-import { makeWASocket, fetchLatestBaileysVersion, makeInMemoryStore, Browsers } from '@whiskeysockets/baileys'
+import {
+  makeWASocket,
+  fetchLatestBaileysVersion,
+  Browsers
+} from '@whiskeysockets/baileys'
 import { registerSocketEvents } from '../utils/helpers.js'
 import { initAuthState } from '../utils/sessionInit.js'
 
@@ -319,36 +352,48 @@ const sessions = new Map()
 
 export const getSession = id => {
   const s = sessions.get(id)
-  if (!s) throw new Error(`Session '${id}' not found`)
+  if (!s) {
+    throw new Error(`Session '${id}' not found`)
+  }
   return s
 }
 
 export const initSession = async id => {
-  if (sessions.has(id)) return sessions.get(id)
+  if (sessions.has(id)) {
+    return sessions.get(id)
+  }
 
-  const store = makeInMemoryStore()
-  const { state, saveCreds } = await initAuthState(path.resolve('.sessions', id))
-  const { version } = await fetchLatestBaileysVersion()
+  try {
+    const { state, saveCreds } = await initAuthState(path.resolve('.sessions', id))
+    const { version } = await fetchLatestBaileysVersion()
 
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    browser: Browsers.macOS('MultiBaileys')
-  })
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      browser: Browsers.macOS('MultiBaileys')
+    })
 
-  store.bind(sock.ev)
-  registerSocketEvents(sock, id, saveCreds, initSession)
-  sessions.set(id, sock)
-  return sock
+    registerSocketEvents(sock, id, saveCreds, initSession)
+
+    sessions.set(id, sock)
+    return sock
+  } catch (err) {
+    console.error(`❌ Error initializing session '${id}':`, err)
+    throw new Error(`Failed to initialize session: ${err.message}`)
+  }
 }
 
 export const deleteSession = async id => {
   const s = sessions.get(id)
-  if (s?.logout) await s.logout()
+  if (s?.logout) {
+    await s.logout()
+  }
   sessions.delete(id)
 
-  const dir = path.resolve('sessions', id)
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+  const dir = path.resolve('.sessions', id)
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 export const getSessions = () => [...sessions.keys()]

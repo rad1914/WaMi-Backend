@@ -157,6 +157,10 @@
                     <label for="contentUrl">Content URL</label>
                     <input type="text" id="contentUrl" placeholder="http://example.com/file.jpg">
                 </div>
+                <div class="form-group" id="fileName-group" style="display: none;">
+                    <label for="fileName">File Name (for Documents)</label>
+                    <input type="text" id="fileName" placeholder="e.g., report.pdf">
+                </div>
             </div>
             <div>
                 <div class="form-group">
@@ -195,7 +199,6 @@
 
         // --- State ---
         let currentSessionId = null;
-
         // --- DOM Elements ---
         const sessionIdDisplay = document.getElementById('sessionIdDisplay');
         const createSessionBtn = document.getElementById('createSessionBtn');
@@ -213,6 +216,8 @@
         const messageContentInput = document.getElementById('messageContent');
         const contentUrlInput = document.getElementById('contentUrl');
         const urlGroup = document.getElementById('url-group');
+        const fileNameInput = document.getElementById('fileName');
+        const fileNameGroup = document.getElementById('fileName-group');
 
         const sendBtn = document.getElementById('sendBtn');
         const replyBtn = document.getElementById('replyBtn');
@@ -255,23 +260,30 @@
             }
 
             let url = `${API_BASE_URL}${endpoint}`;
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
             const isGetRequest = options.method === 'GET' || !options.method;
 
-            // Add sessionId to query params for GET requests, otherwise add to body
-            if (isGetRequest) {
-                const params = new URLSearchParams({ sessionId: currentSessionId });
-                url += `?${params}`;
-            } else if (options.body) {
-                const body = JSON.parse(options.body);
-                body.sessionId = currentSessionId;
-                options.body = JSON.stringify(body);
+            // For message routes, middleware requires the session ID in the header.
+            // For auth routes, it's passed in the query/body.
+            if (currentSessionId) {
+                if (endpoint.startsWith('/message')) {
+                    headers['x-session-id'] = currentSessionId;
+                }
+
+                if (isGetRequest) {
+                    const params = new URLSearchParams({ sessionId: currentSessionId });
+                    url += `?${params}`;
+                } else if (options.body) {
+                    // The backend services also expect sessionId in the body,
+                    // so we keep this part.
+                    const body = JSON.parse(options.body);
+                    body.sessionId = currentSessionId;
+                    options.body = JSON.stringify(body);
+                }
             }
 
             try {
-                const response = await fetch(url, {
-                    ...options,
-                    headers: { 'Content-Type': 'application/json', ...options.headers },
-                });
+                const response = await fetch(url, { ...options, headers });
                 const result = await response.json();
                 displayResponse(result);
                 return result;
@@ -293,7 +305,10 @@
         // --- Event Listeners ---
         messageTypeSelect.addEventListener('change', () => {
             const selectedType = messageTypeSelect.value;
-            urlGroup.style.display = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType) ? 'block' : 'none';
+            const isUrlType = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType);
+            urlGroup.style.display = isUrlType ? 'block' : 'none';
+            // SHOW FILENAME INPUT ONLY FOR DOCUMENTS
+            fileNameGroup.style.display = selectedType === 'document' ? 'block' : 'none';
         });
 
         // Authentication Actions
@@ -349,12 +364,17 @@
             const type = messageTypeSelect.value;
             const isUrlBased = ['image', 'video', 'audio', 'document', 'sticker'].includes(type);
             const content = isUrlBased ? contentUrlInput.value : messageContentInput.value;
+            const options = {};
+
+            if (type === 'document' && fileNameInput.value) {
+                options.fileName = fileNameInput.value;
+            }
             
             const body = {
                 jid: jidInput.value,
                 type: type,
                 content: content,
-                options: {}
+                options: options
             };
             fetchApi('/message/send', { method: 'POST', body: JSON.stringify(body) });
         });
@@ -363,7 +383,8 @@
             const body = {
                 jid: jidInput.value,
                 content: messageContentInput.value,
-                quotedMessageId: messageIdInput.value
+                quotedMessageId: messageIdInput.value,
+                type: 'text' // Be explicit
             };
             fetchApi('/message/reply', { method: 'POST', body: JSON.stringify(body) });
         });
@@ -376,7 +397,7 @@
             };
             fetchApi('/message/edit', { method: 'POST', body: JSON.stringify(body) });
         });
-        
+
         reactBtn.addEventListener('click', () => {
             const body = {
                 jid: jidInput.value,
