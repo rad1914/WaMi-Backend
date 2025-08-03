@@ -2,25 +2,22 @@
 import { Boom } from '@hapi/boom'
 import { store } from '../store/store.js'
 import logger from '../utils/logger.js'
-import baileys from '@whiskeysockets/baileys'
-
-const {
+import {
   makeWASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   DisconnectReason
-} = baileys
+} from '@whiskeysockets/baileys'
 
 let clientSocket = null
 
 export const initClient = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
-
   const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
-    version, // ✅ ahora es un array
+    version,
     auth: state,
     browser: Browsers.macOS('BaileysAPI')
   })
@@ -37,25 +34,22 @@ export const initClient = async () => {
       logger.warn(`Disconnected with code ${code}`)
 
       if (code !== DisconnectReason.loggedOut) {
-        logger.info('Reconnecting to WhatsApp...')
+        logger.info('Reconnecting...')
         initClient()
       } else {
-        logger.error('Logged out. Please re-authenticate.')
+        logger.error('Logged out.')
       }
     }
 
     if (connection === 'open') {
-      logger.info('✅ Connected to WhatsApp Web')
+      logger.info('✅ Connected')
     }
   })
 
   clientSocket = sock
 }
 
-
 export const getClient = () => {
-  if (!clientSocket) {
-    throw new Error('WhatsApp client not initialized. Call initClient() first.')
-  }
+  if (!clientSocket) throw new Error('Client not initialized')
   return clientSocket
 }

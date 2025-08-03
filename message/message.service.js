@@ -1,100 +1,63 @@
 // @path: message/message.service.js
-import { getClient, initClient } from '../client/client.js'
-import {
-  makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  Browsers,
-  makeCacheableSignalKeyStore,
-  DisconnectReason,
-  jidNormalizedUser,
-  jidDecode,
-} from '@whiskeysockets/baileys';
+import { getClient } from '../client/client.js'
+
+const send = async (jid, content, options) => {
+  const client = getClient()
+  return await client.sendMessage(jid, content, options)
+}
+
 export const sendMessage = async ({ jid, type, content, options }) => {
-  if (!jid || !type || !content) {
-    throw new Error('jid, type and content are required.')
-  }
+  if (!jid || !type || !content) throw new Error('jid, type and content are required.')
+  const payload = {
+    text: { text: content },
+    image: { image: { url: content } },
+    video: { video: { url: content } },
+    audio: { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
+    document: { document: { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' } },
+    sticker: { sticker: { url: content } }
+  }[type]
 
-  const messageContent = {}
-
-  switch (type) {
-    case 'text':
-      messageContent.text = content
-      break
-    case 'image':
-      messageContent.image = { url: content }
-      break
-    case 'video':
-      messageContent.video = { url: content }
-      break
-    case 'audio':
-      messageContent.audio = { url: content, mimetype: 'audio/ogg; codecs=opus' }
-      break
-    case 'document':
-      messageContent.document = { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' }
-      break
-    case 'sticker':
-      messageContent.sticker = { url: content }
-      break
-    default:
-      throw new Error(`Unsupported message type: ${type}`)
-  }
-
-  return await clientSocket.sendMessage(jid, messageContent, options)
+  if (!payload) throw new Error(`Unsupported type: ${type}`)
+  return await send(jid, payload, options)
 }
 
 export const replyToMessage = async ({ jid, content, quotedMessageId, type = 'text' }) => {
   const quoted = await findMessage(jid, quotedMessageId)
   if (!quoted) throw new Error('Quoted message not found.')
-
-  return await clientSocket.sendMessage(jid, { [type]: content }, { quoted })
+  return await send(jid, { [type]: content }, { quoted })
 }
 
 export const forwardMessage = async ({ to, message }) => {
   if (!to || !message) throw new Error('to and message required.')
-  return await clientSocket.relayMessage(to, message, { messageId: message.key?.id })
+  return await getClient().relayMessage(to, message, { messageId: message.key?.id })
 }
 
 export const reactToMessage = async ({ jid, messageId, emoji }) => {
-  const reactionMsg = {
+  return await send(jid, {
     react: {
       text: emoji,
-      key: {
-        remoteJid: jid,
-        id: messageId,
-        fromMe: false
-      }
-    }
-  }
-  return await clientSocket.sendMessage(jid, reactionMsg)
-}
-
-export const deleteMessage = async ({ jid, messageId, fromMe = true }) => {
-  return await clientSocket.sendMessage(jid, {
-    delete: {
-      remoteJid: jid,
-      fromMe,
-      id: messageId
+      key: { remoteJid: jid, id: messageId, fromMe: false }
     }
   })
 }
 
-export const editMessage = async ({ jid, messageId, newText }) => {
-  const msgKey = {
-    remoteJid: jid,
-    fromMe: true,
-    id: messageId
-  }
+export const deleteMessage = async ({ jid, messageId, fromMe = true }) => {
+  return await send(jid, {
+    delete: { remoteJid: jid, fromMe, id: messageId }
+  })
+}
 
-  return await clientSocket.sendMessage(jid, {
+export const editMessage = async ({ jid, messageId, newText }) => {
+  return await send(jid, {
     edit: {
       message: { conversation: newText },
-      key: msgKey
+      key: { remoteJid: jid, fromMe: true, id: messageId }
     }
   })
 }
 
 const findMessage = async (jid, msgId) => {
-  const messages = await clientSocket?.store?.loadMessages(jid, 50)
-  return messages?.messages?.find((m) => m.key?.id === msgId)
+  const client = getClient()
+  const messages = await client.store?.loadMessages(jid, 50)
+  return messages?.messages?.find(m => m.key?.id === msgId)
 }
