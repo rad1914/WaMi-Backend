@@ -1,5 +1,4 @@
 // @path: utils/helpers.js
-
 import { Boom } from '@hapi/boom'
 import { DisconnectReason } from '@whiskeysockets/baileys'
 import logger from './logger.js'
@@ -9,7 +8,12 @@ export const wrapController = fn => async (req, res) => {
     const input = req.method === 'GET' ? req.query : req.body
     res.json(await fn(input))
   } catch (err) {
-    res.status(500).json({ error: err.message })
+
+    const payload = { error: err.message }
+    if (process.env.NODE_ENV === 'development') {
+      payload.stack = err.stack
+    }
+    res.status(500).json(payload)
   }
 }
 

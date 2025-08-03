@@ -1,5 +1,7 @@
 // @path: message/message.routes.js
+
 import { Router } from 'express'
+import { checkSession } from '../middlewares/checkSession.js'
 import {
   send,
   reply,
@@ -10,6 +12,8 @@ import {
 } from './message.controller.js'
 
 const router = Router()
+
+router.use(checkSession)
 
 router.post('/send', send)
 router.post('/reply', reply)
