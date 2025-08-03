@@ -1,6 +1,4 @@
 // @path: store/store.js
-
-import path from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
 import { registerSocketEvents } from '../utils/helpers.js'
@@ -14,16 +12,16 @@ let persistenceStarted = false
 const startPersistence = () => {
   if (persistenceStarted) return
   persistenceStarted = true
-
   setInterval(() => {
-    const chats   = store.chats instanceof Map ? [...store.chats.entries()] : []
-    const contacts = store.contacts || {}
-    const payload = { chats, contacts }
-
     try {
-      writeFileSync(STORE_PATH, JSON.stringify(payload, null, 2))
+      writeFileSync(STORE_PATH,
+        JSON.stringify({
+          chats: [...store.chats.entries()],
+          contacts: store.contacts
+        }, null, 2)
+      )
     } catch (err) {
-      console.warn('⚠️ Error al escribir store.json:', err)
+      console.warn('⚠️ Error persistiendo store:', err)
     }
   }, 10_000)
 }
@@ -34,7 +32,7 @@ if (existsSync(STORE_PATH)) {
     if (Array.isArray(chats)) store.chats = new Map(chats)
     if (contacts && typeof contacts === 'object') store.contacts = contacts
   } catch (err) {
-    console.warn('⚠️ Error al leer o parsear store.json:', err)
+    console.warn('⚠️ Error cargando store:', err)
   }
 }
 
@@ -47,7 +45,6 @@ store.bind = ev => {
 export const initAuthStore = async () => {
   const { state, saveCreds } = await initAuthState('auth')
   const signalKeyStore = makeCacheableSignalKeyStore(state.signalKeyStore || {}, saveCreds)
-
   registerSocketEvents(store, 'shared', saveCreds, initAuthStore)
   return { authState: state, signalKeyStore }
 }
