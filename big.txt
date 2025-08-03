@@ -4,26 +4,51 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
 
 const { makeInMemoryStore, useMultiFileAuthState, makeCacheableSignalKeyStore } = baileys
-const STORE_PATH = './sessions/store.json'
+const STORE_PATH = './.sessions/store.json'
 const store = makeInMemoryStore({})
 
-setInterval(() => {
-  writeFileSync(STORE_PATH, JSON.stringify({
-    chats: [...store.chats.entries()],
-    contacts: store.contacts
-  }, null, 2))
-}, 10000)
+function setupPersistence() {
+  if (setupPersistence._started) return
+  setupPersistence._started = true
+
+  setInterval(() => {
+    const chats   = store.chats instanceof Map ? [...store.chats.entries()] : []
+    const contacts = store.contacts || {}
+
+    const payload = { chats, contacts }
+    try {
+      writeFileSync(STORE_PATH, JSON.stringify(payload, null, 2))
+    } catch (err) {
+      
+      console.warn('⚠️ Error al escribir store.json:', err)
+    }
+  }, 10000)
+}
 
 if (existsSync(STORE_PATH)) {
-  const data = JSON.parse(readFileSync(STORE_PATH))
-  if (data.chats) store.chats = new Map(data.chats)
-  if (data.contacts) store.contacts = data.contacts
+  try {
+    const data = JSON.parse(readFileSync(STORE_PATH))
+    if (Array.isArray(data.chats)) {
+      store.chats = new Map(data.chats)
+    }
+    if (data.contacts && typeof data.contacts === 'object') {
+      store.contacts = data.contacts
+    }
+  } catch (err) {
+    console.warn('⚠️ Error al leer o parsear store.json:', err)
+  }
 }
 
 export const initAuthStore = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
   const signalKeyStore = makeCacheableSignalKeyStore(state.signalKeyStore || {}, saveCreds)
   return { authState: state, signalKeyStore }
+}
+
+const originalBind = store.bind.bind(store)
+store.bind = ev => {
+  originalBind(ev)
+  setupPersistence()
 }
 
 export { store }
@@ -187,6 +212,7 @@ const ensureClient = async () => {
   }
   return client
 }
+
 // @path: auth/auth.routes.js
 import { Router } from 'express'
 import {
@@ -205,18 +231,14 @@ router.get('/status', checkAuth)
 
 export default router
 // @path: auth/auth.controller.js
-import {
-  initSession,
-  deleteSession,
-  getSession
-} from '../client/session.manager.js'
+import { initSession, deleteSession } from '../client/session.manager.js'
+import { randomUUID } from 'crypto'
 
 const respond = (res, fn) =>
   fn().then(data => res.json(data)).catch(err => res.status(500).json({ error: err.message }))
 
 export const createSession = (req, res) => respond(res, async () => {
-  const { sessionId } = req.body
-  if (!sessionId) throw new Error('sessionId is required')
+  const sessionId = randomUUID()
   await initSession(sessionId)
   return { sessionId }
 })
@@ -232,11 +254,9 @@ export const getQRCode = (req, res) => respond(res, async () => {
   const { sessionId } = req.query
   if (!sessionId) throw new Error('sessionId is required')
   const client = await initSession(sessionId)
-
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-
-    const handler = (update) => {
+    const handler = update => {
       if (update.qr) {
         clearTimeout(timeout)
         client.ev.off('connection.update', handler)
@@ -247,14 +267,14 @@ export const getQRCode = (req, res) => respond(res, async () => {
         resolve({ success: true })
       }
     }
-
     client.ev.on('connection.update', handler)
   })
 })
 
 export const checkAuth = (req, res) => respond(res, async () => {
   const { sessionId } = req.query
-  const client = getSession(sessionId)
+  if (!sessionId) throw new Error('sessionId is required')
+  const client = await import('../client/session.manager.js').then(m => m.getSession(sessionId))
   return { authenticated: !!client?.user?.id }
 })
 // @path: index.js
@@ -312,66 +332,57 @@ import {
 import { Boom } from '@hapi/boom'
 import path from 'path'
 import fs from 'fs'
-import logger from '../utils/logger.js'
 
 const sessions = new Map()
 
-export const getSession = (sessionId) => {
+export const getSession = sessionId => {
   const session = sessions.get(sessionId)
   if (!session) throw new Error(`Session '${sessionId}' not found`)
   return session
 }
 
-export const initSession = async (sessionId) => {
+export const initSession = async sessionId => {
   if (sessions.has(sessionId)) return sessions.get(sessionId)
-
   const store = makeInMemoryStore({})
-  const sessionPath = path.resolve('sessions', sessionId)
+  const sessionPath = path.resolve('.sessions', sessionId)
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
   const { version } = await fetchLatestBaileysVersion()
-
   const sock = makeWASocket({
     version,
     auth: state,
-    browser: Browsers.macOS('MultiBaileys'),
+    browser: Browsers.macOS('MultiBaileys')
   })
-
   store.bind(sock.ev)
-
   sock.ev.on('creds.update', saveCreds)
-
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) logger.info(`[${sessionId}] QR: ${qr}`)
-
+    if (qr) console.log(`[${sessionId}] QR: ${qr}`)
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      logger.warn(`[${sessionId}] Disconnected (${code})`)
-
+      console.warn(`[${sessionId}] Disconnected (${code})`)
       if (code !== DisconnectReason.loggedOut) {
         initSession(sessionId)
       } else {
         sessions.delete(sessionId)
-        logger.error(`[${sessionId}] Logged out`)
+        console.error(`[${sessionId}] Logged out`)
       }
     }
-
     if (connection === 'open') {
-      logger.info(`[${sessionId}] Connected`)
+      console.info(`[${sessionId}] Connected`)
     }
   })
-
   sessions.set(sessionId, sock)
   return sock
 }
 
-export const deleteSession = async (sessionId) => {
+export const deleteSession = async sessionId => {
   const sock = sessions.get(sessionId)
   if (sock?.logout) await sock.logout()
   sessions.delete(sessionId)
-
-  const dir = path.resolve('auth/sessions', sessionId)
+  const dir = path.resolve('sessions', sessionId)
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
 }
+
+export const getSessions = () => Array.from(sessions.keys())
 // @path: client/client.js
 import { Boom } from '@hapi/boom'
 import { store } from '../store/store.js'

@@ -1,55 +1,44 @@
 // @path: auth/auth.service.js
-import { initClient, getClient } from '../client/client.js'
+import { initSession, deleteSession, getSession } from '../client/session.manager.js'
+import { randomUUID } from 'crypto'
 
-let qrCode = null
 let pairingCode = null
-let isLoggedIn = false
 
-export const getQRCode = async () => {
-  const client = await ensureClient()
+export const createSession = async () => {
+  const sessionId = randomUUID()
+  await initSession(sessionId)
+  return { sessionId }
+}
+
+export const removeSession = async ({ sessionId }) => {
+  if (!sessionId) throw new Error('sessionId is required')
+  await deleteSession(sessionId)
+  return { success: true }
+}
+
+export const getQRCode = async ({ sessionId }) => {
+  if (!sessionId) throw new Error('sessionId is required')
+  const client = await initSession(sessionId)
+
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-
-    const handler = (u) => {
-      if (u.qr) {
+    const handler = update => {
+      if (update.qr) {
         clearTimeout(timeout)
         client.ev.off('connection.update', handler)
-        resolve(qrCode = u.qr)
-      } else if (u.connection === 'open') {
+        resolve({ qr: update.qr })
+      } else if (update.connection === 'open') {
         clearTimeout(timeout)
         client.ev.off('connection.update', handler)
-        resolve(isLoggedIn = true)
+        resolve({ success: true })
       }
     }
-
     client.ev.on('connection.update', handler)
   })
 }
 
-export const getPairingCode = async () => {
-  const client = await ensureClient()
-  return client.requestPairingCode().then(c => pairingCode = c)
+export const checkAuth = async ({ sessionId }) => {
+  if (!sessionId) throw new Error('sessionId is required')
+  const client = getSession(sessionId)
+  return { authenticated: !!client?.user?.id }
 }
-
-export const getAuthStatus = () => {
-  const client = getClient()
-  return !!(client?.user?.id || isLoggedIn)
-}
-
-export const logoutSession = async () => {
-  const client = getClient()
-  if (client?.logout) {
-    await client.logout()
-    isLoggedIn = false
-  }
-}
-
-const ensureClient = async () => {
-  let client = getClient()
-  if (!client?.ws) {
-    await initClient()
-    client = getClient()
-  }
-  return client
-}
-

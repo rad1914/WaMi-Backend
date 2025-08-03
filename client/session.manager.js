@@ -1,3 +1,4 @@
+// @path: client/session.manager.js
 import {
   makeWASocket,
   useMultiFileAuthState,
