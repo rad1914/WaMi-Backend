@@ -1,17 +1,17 @@
 // @path: auth/auth.routes.js
 import { Router } from 'express'
 import {
-  qrLogin,
-  pairingLogin,
-  checkAuth,
-  logout
+  createSession,
+  removeSession,
+  getQRCode,
+  checkAuth
 } from './auth.controller.js'
 
 const router = Router()
 
-router.get('/qr', qrLogin)
-router.post('/pairing', pairingLogin)
+router.post('/create', createSession)
+router.delete('/remove', removeSession)
+router.get('/qr', getQRCode)
 router.get('/status', checkAuth)
-router.delete('/logout', logout)
 
 export default router

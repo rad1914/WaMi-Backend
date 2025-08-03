@@ -10,9 +10,9 @@ const handler = fn => async (req, res) => {
   }
 }
 
-export const send = handler('sendMessage')
-export const reply = handler('replyToMessage')
+export const send    = handler('sendMessage')
+export const reply   = handler('replyToMessage')
 export const forward = handler('forwardMessage')
-export const react = handler('reactToMessage')
-export const remove = handler('deleteMessage')
-export const edit = handler('editMessage')
+export const react   = handler('reactToMessage')
+export const remove  = handler('deleteMessage')
+export const edit    = handler('editMessage')

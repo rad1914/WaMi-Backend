@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
 
 const { makeInMemoryStore, useMultiFileAuthState, makeCacheableSignalKeyStore } = baileys
-const STORE_PATH = './auth/store.json'
+const STORE_PATH = './sessions/store.json'
 const store = makeInMemoryStore({})
 
 setInterval(() => {

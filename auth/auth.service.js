@@ -9,11 +9,20 @@ export const getQRCode = async () => {
   const client = await ensureClient()
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-    client.ev.once('connection.update', (u) => {
-      clearTimeout(timeout)
-      if (u.qr) resolve(qrCode = u.qr)
-      else if (u.connection === 'open') resolve(isLoggedIn = true)
-    })
+
+    const handler = (u) => {
+      if (u.qr) {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve(qrCode = u.qr)
+      } else if (u.connection === 'open') {
+        clearTimeout(timeout)
+        client.ev.off('connection.update', handler)
+        resolve(isLoggedIn = true)
+      }
+    }
+
+    client.ev.on('connection.update', handler)
   })
 }
 
@@ -37,6 +46,9 @@ export const logoutSession = async () => {
 
 const ensureClient = async () => {
   let client = getClient()
-  if (!client?.ws) await initClient()
-  return getClient()
+  if (!client?.ws) {
+    await initClient()
+    client = getClient()
+  }
+  return client
 }

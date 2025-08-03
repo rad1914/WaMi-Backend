@@ -3,49 +3,27 @@ import path from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import baileys from '@whiskeysockets/baileys'
 
-const {
-  makeInMemoryStore,
-  useMultiFileAuthState,
-  makeCacheableSignalKeyStore
-} = baileys
-
-const STORE_PATH = path.resolve('./auth/store.json')
+const { makeInMemoryStore, useMultiFileAuthState, makeCacheableSignalKeyStore } = baileys
+const STORE_PATH = './auth/store.json'
 const store = makeInMemoryStore({})
 
 setInterval(() => {
-  writeFileSync(
-    STORE_PATH,
-    JSON.stringify(
-      {
-        chats: store.chats,
-        contacts: store.contacts
-      },
-      (_, val) => (val instanceof Map ? [...val.entries()] : val),
-      2
-    )
-  )
+  writeFileSync(STORE_PATH, JSON.stringify({
+    chats: [...store.chats.entries()],
+    contacts: store.contacts
+  }, null, 2))
 }, 10000)
 
 if (existsSync(STORE_PATH)) {
-  const data = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
+  const data = JSON.parse(readFileSync(STORE_PATH))
   if (data.chats) store.chats = new Map(data.chats)
   if (data.contacts) store.contacts = data.contacts
 }
 
-let authState, saveCreds
-
 export const initAuthStore = async () => {
-  const { state, saveCreds: _saveCreds } = await useMultiFileAuthState('auth')
-  authState = state
-  saveCreds = _saveCreds
-
-  const signalKeyStore = makeCacheableSignalKeyStore(
-    state.signalKeyStore ||
-{},
-    updated => saveCreds(updated)
-  )
-
-  return { authState, signalKeyStore }
+  const { state, saveCreds } = await useMultiFileAuthState('auth')
+  const signalKeyStore = makeCacheableSignalKeyStore(state.signalKeyStore || {}, saveCreds)
+  return { authState: state, signalKeyStore }
 }
 
 export { store }
@@ -71,304 +49,196 @@ router.post('/edit', edit)
 
 export default router
 // @path: message/message.controller.js
-import {
-  sendMessage,
-  replyToMessage,
-  forwardMessage,
-  reactToMessage,
-  deleteMessage,
-  editMessage
-} from './message.service.js'
+import * as service from './message.service.js'
 
-export const send = async (req, res) => {
+const handler = fn => async (req, res) => {
   try {
-    const response = await sendMessage(req.body)
-    res.status(200).json(response)
+    const result = await service[fn](req.body)
+    res.status(200).json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 }
 
-export const reply = async (req, res) => {
-  try {
-    const response = await replyToMessage(req.body)
-    res.status(200).json(response)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const forward = async (req, res) => {
-  try {
-    const response = await forwardMessage(req.body)
-    res.status(200).json(response)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const react = async (req, res) => {
-  try {
-    const response = await reactToMessage(req.body)
-    res.status(200).json(response)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const remove = async (req, res) => {
-  try {
-    const response = await deleteMessage(req.body)
-    res.status(200).json(response)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
-
-export const edit = async (req, res) => {
-  try {
-    const response = await editMessage(req.body)
-    res.status(200).json(response)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
+export const send = handler('sendMessage')
+export const reply = handler('replyToMessage')
+export const forward = handler('forwardMessage')
+export const react = handler('reactToMessage')
+export const remove = handler('deleteMessage')
+export const edit = handler('editMessage')
 // @path: message/message.service.js
-import { getClient, initClient } from '../client/client.js'
-import {
-  makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  Browsers,
-  makeCacheableSignalKeyStore,
-  DisconnectReason,
-  jidNormalizedUser,
-  jidDecode,
-} from '@whiskeysockets/baileys';
-export const sendMessage = async ({ jid, type, content, options }) => {
-  if (!jid || !type || !content) {
-    throw new Error('jid, type and content are required.')
+import { getSession } from '../client/session.manager.js'
+
+const getPayload = (type, content, options) => {
+  const payloads = {
+    text: { text: content },
+    image: { image: { url: content } },
+    video: { video: { url: content } },
+    audio: { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
+    document: { document: { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' } },
+    sticker: { sticker: { url: content } },
+    react: { react: content },
+    delete: { delete: content },
+    edit: { edit: content }
   }
-
-  const messageContent = {}
-
-  switch (type) {
-    case 'text':
-      messageContent.text = content
-      break
-    case 'image':
-      messageContent.image = { url: content }
-      break
-    case 'video':
-      messageContent.video = { url: content }
-      break
-    case 'audio':
-      messageContent.audio = { url: content, mimetype: 'audio/ogg; codecs=opus' }
-      break
-    case 'document':
-      messageContent.document = { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' }
-      break
-    case 'sticker':
-      messageContent.sticker = { url: content }
-      break
-    default:
-      throw new Error(`Unsupported message type: ${type}`)
-  }
-
-  return await clientSocket.sendMessage(jid, messageContent, options)
+  return payloads[type]
 }
 
-export const replyToMessage = async ({ jid, content, quotedMessageId, type = 'text' }) => {
-  const quoted = await findMessage(jid, quotedMessageId)
-  if (!quoted) throw new Error('Quoted message not found.')
-
-  return await clientSocket.sendMessage(jid, { [type]: content }, { quoted })
+export const sendMessage = async ({ sessionId, jid, type, content, options }) => {
+  const sock = getSession(sessionId)
+  const payload = getPayload(type, content, options)
+  return await sock.sendMessage(jid, payload, options)
 }
 
-export const forwardMessage = async ({ to, message }) => {
-  if (!to || !message) throw new Error('to and message required.')
-  return await clientSocket.relayMessage(to, message, { messageId: message.key?.id })
+export const replyToMessage = async ({ sessionId, jid, content, quotedMessageId, type = 'text' }) => {
+  const sock = getSession(sessionId)
+  const quoted = await findMessage(sessionId, jid, quotedMessageId)
+  const payload = getPayload(type, content)
+  return await sock.sendMessage(jid, payload, { quoted })
 }
 
-export const reactToMessage = async ({ jid, messageId, emoji }) => {
-  const reactionMsg = {
-    react: {
-      text: emoji,
-      key: {
-        remoteJid: jid,
-        id: messageId,
-        fromMe: false
-      }
-    }
-  }
-  return await clientSocket.sendMessage(jid, reactionMsg)
+export const forwardMessage = async ({ sessionId, to, message }) => {
+  const sock = getSession(sessionId)
+  return await sock.relayMessage(to, message, { messageId: message.key?.id })
 }
 
-export const deleteMessage = async ({ jid, messageId, fromMe = true }) => {
-  return await clientSocket.sendMessage(jid, {
-    delete: {
-      remoteJid: jid,
-      fromMe,
-      id: messageId
-    }
+export const reactToMessage = async ({ sessionId, jid, messageId, emoji }) => {
+  const sock = getSession(sessionId)
+  const content = { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } }
+  return await sock.sendMessage(jid, { react: content })
+}
+
+export const deleteMessage = async ({ sessionId, jid, messageId, fromMe = true }) => {
+  const sock = getSession(sessionId)
+  return await sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe, id: messageId } })
+}
+
+export const editMessage = async ({ sessionId, jid, messageId, newText }) => {
+  const sock = getSession(sessionId)
+  return await sock.sendMessage(jid, {
+    edit: { message: { conversation: newText }, key: { remoteJid: jid, fromMe: true, id: messageId } }
   })
 }
 
-export const editMessage = async ({ jid, messageId, newText }) => {
-  const msgKey = {
-    remoteJid: jid,
-    fromMe: true,
-    id: messageId
-  }
-
-  return await clientSocket.sendMessage(jid, {
-    edit: {
-      message: { conversation: newText },
-      key: msgKey
-    }
-  })
-}
-
-const findMessage = async (jid, msgId) => {
-  const messages = await clientSocket?.store?.loadMessages(jid, 50)
-  return messages?.messages?.find((m) => m.key?.id === msgId)
+const findMessage = async (sessionId, jid, msgId) => {
+  const sock = getSession(sessionId)
+  const messages = await sock.store?.loadMessages(jid, 50)
+  return messages?.messages?.find(m => m.key?.id === msgId)
 }
 // @path: routes.js
 import { Router } from 'express'
-import authRoutes from './auth/auth.routes.js'
-import messageRoutes from './message/message.routes.js'
+import auth from './auth/auth.routes.js'
+import message from './message/message.routes.js'
 
-const router = Router()
-
-router.use('/auth', authRoutes)
-router.use('/message', messageRoutes)
-
-export default router
+export default Router()
+  .use('/auth', auth)
+  .use('/message', message)
 // @path: auth/auth.service.js
-import { getClient, initClient } from '../client/client.js'
-import {
-  makeWASocket,
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  Browsers,
-  makeCacheableSignalKeyStore,
-  DisconnectReason,
-  jidNormalizedUser,
-  jidDecode,
-} from '@whiskeysockets/baileys';
+import { initClient, getClient } from '../client/client.js'
 
 let qrCode = null
 let pairingCode = null
 let isLoggedIn = false
 
 export const getQRCode = async () => {
-  if (!clientSocket?.ws) {
-    await initClient()
-  }
-
+  const client = await ensureClient()
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
-
-    clientSocket.ev.once('connection.update', (update) => {
-      if (update.qr) {
-        clearTimeout(timeout)
-        qrCode = update.qr
-        resolve(qrCode)
-      } else if (update.connection === 'open') {
-        clearTimeout(timeout)
-        isLoggedIn = true
-        resolve('already connected')
-      }
+    client.ev.once('connection.update', (u) => {
+      clearTimeout(timeout)
+      if (u.qr) resolve(qrCode = u.qr)
+      else if (u.connection === 'open') resolve(isLoggedIn = true)
     })
   })
 }
 
 export const getPairingCode = async () => {
-  if (!clientSocket?.ws) {
-    await initClient()
-  }
-
-  return new Promise(async (resolve, reject) => {
-    try {
-      const code = await clientSocket.requestPairingCode()
-      pairingCode = code
-      resolve(code)
-    } catch (err) {
-      reject(err)
-    }
-  })
+  const client = await ensureClient()
+  return client.requestPairingCode().then(c => pairingCode = c)
 }
 
-export const getAuthStatus = async () => {
-  return !!(clientSocket?.user?.id || isLoggedIn)
+export const getAuthStatus = () => {
+  const client = getClient()
+  return !!(client?.user?.id || isLoggedIn)
 }
 
 export const logoutSession = async () => {
-  if (clientSocket?.logout) {
-    await clientSocket.logout()
+  const client = getClient()
+  if (client?.logout) {
+    await client.logout()
     isLoggedIn = false
   }
+}
+
+const ensureClient = async () => {
+  let client = getClient()
+  if (!client?.ws) {
+    await initClient()
+    client = getClient()
+  }
+  return client
 }
 // @path: auth/auth.routes.js
 import { Router } from 'express'
 import {
-  qrLogin,
-  pairingLogin,
-  checkAuth,
-  logout
+  createSession,
+  removeSession,
+  getQRCode,
+  checkAuth
 } from './auth.controller.js'
 
 const router = Router()
 
-router.get('/qr', qrLogin)
-router.post('/pairing', pairingLogin)
+router.post('/create', createSession)
+router.delete('/remove', removeSession)
+router.get('/qr', getQRCode)
 router.get('/status', checkAuth)
-router.delete('/logout', logout)
 
 export default router
 // @path: auth/auth.controller.js
 import {
-  getQRCode,
-  getPairingCode,
-  getAuthStatus,
-  logoutSession
-} from './auth.service.js'
+  initSession,
+  deleteSession,
+  getSession
+} from '../client/session.manager.js'
 
-export const qrLogin = async (req, res) => {
-  try {
-    const qr = await getQRCode()
-    res.status(200).json({ qr })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
+const respond = (res, fn) =>
+  fn().then(data => res.json(data)).catch(err => res.status(500).json({ error: err.message }))
 
-export const pairingLogin = async (req, res) => {
-  try {
-    const code = await getPairingCode()
-    res.status(200).json({ pairingCode: code })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
+export const createSession = (req, res) => respond(res, async () => {
+  const { sessionId } = req.body
+  if (!sessionId) throw new Error('sessionId is required')
+  await initSession(sessionId)
+  return { sessionId }
+})
 
-export const checkAuth = async (req, res) => {
-  try {
-    const status = await getAuthStatus()
-    res.status(200).json({ authenticated: status })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
+export const removeSession = (req, res) => respond(res, async () => {
+  const { sessionId } = req.body
+  if (!sessionId) throw new Error('sessionId is required')
+  await deleteSession(sessionId)
+  return { success: true }
+})
 
-export const logout = async (req, res) => {
-  try {
-    await logoutSession()
-    res.status(200).json({ success: true })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-}
+export const getQRCode = (req, res) => respond(res, async () => {
+  const { sessionId } = req.query
+  if (!sessionId) throw new Error('sessionId is required')
+  const client = await initSession(sessionId)
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
+    client.ev.once('connection.update', update => {
+      clearTimeout(timeout)
+      if (update.qr) resolve({ qr: update.qr })
+      else if (update.connection === 'open') resolve({ success: true })
+    })
+  })
+})
+
+export const checkAuth = (req, res) => respond(res, async () => {
+  const { sessionId } = req.query
+  const client = getSession(sessionId)
+  return { authenticated: !!client?.user?.id }
+})
 // @path: index.js
 import express from 'express'
 import dotenv from 'dotenv'
@@ -412,27 +282,91 @@ const logger = pino({
 })
 
 export default logger
+// @path: client/session.manager.js
+import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason, makeInMemoryStore, Browsers } from '@whiskeysockets/baileys'
+import { Boom } from '@hapi/boom'
+import path from 'path'
+import fs from 'fs'
+import logger from '../utils/logger.js'
+
+const sessions = new Map()
+
+export const getSession = (sessionId) => {
+  const session = sessions.get(sessionId)
+  if (!session) throw new Error(`Session '${sessionId}' not found`)
+  return session
+}
+
+export const initSession = async (sessionId) => {
+  if (sessions.has(sessionId)) return sessions.get(sessionId)
+
+  const store = makeInMemoryStore({})
+  const sessionPath = path.resolve('auth/sessions', sessionId)
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
+  const { version } = await fetchLatestBaileysVersion()
+
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    browser: Browsers.macOS('MultiBaileys'),
+  })
+
+  store.bind(sock.ev)
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) logger.info(`[${sessionId}] QR: ${qr}`)
+
+    if (connection === 'close') {
+      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
+      logger.warn(`[${sessionId}] Disconnected (${code})`)
+
+      if (code !== DisconnectReason.loggedOut) {
+        initSession(sessionId)
+      } else {
+        sessions.delete(sessionId)
+        logger.error(`[${sessionId}] Logged out`)
+      }
+    }
+
+    if (connection === 'open') {
+      logger.info(`[${sessionId}] Connected`)
+    }
+  })
+
+  sessions.set(sessionId, sock)
+  return sock
+}
+
+export const deleteSession = async (sessionId) => {
+  const sock = sessions.get(sessionId)
+  if (sock?.logout) await sock.logout()
+  sessions.delete(sessionId)
+
+  const dir = path.resolve('auth/sessions', sessionId)
+  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+}
 // @path: client/client.js
 import { Boom } from '@hapi/boom'
 import { store } from '../store/store.js'
 import logger from '../utils/logger.js'
-import baileys from '@whiskeysockets/baileys'
-
-const {
+import {
   makeWASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
   DisconnectReason
-} = baileys
+} from '@whiskeysockets/baileys'
 
 let clientSocket = null
 
 export const initClient = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
+  const { version } = await fetchLatestBaileysVersion()
 
   const sock = makeWASocket({
-    version: await fetchLatestBaileysVersion(),
+    version,
     auth: state,
     browser: Browsers.macOS('BaileysAPI')
   })
@@ -442,24 +376,22 @@ export const initClient = async () => {
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      console.log('📱 Scan QR Code:', qr)
-    }
+    if (qr) console.log('📱 Scan QR Code:', qr)
 
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       logger.warn(`Disconnected with code ${code}`)
 
       if (code !== DisconnectReason.loggedOut) {
-        logger.info('Reconnecting to WhatsApp...')
+        logger.info('Reconnecting...')
         initClient()
       } else {
-        logger.error('Logged out. Please re-authenticate.')
+        logger.error('Logged out.')
       }
     }
 
     if (connection === 'open') {
-      logger.info('✅ Connected to WhatsApp Web')
+      logger.info('✅ Connected')
     }
   })
 
@@ -467,8 +399,6 @@ export const initClient = async () => {
 }
 
 export const getClient = () => {
-  if (!clientSocket) {
-    throw new Error('WhatsApp client not initialized. Call initClient() first.')
-  }
+  if (!clientSocket) throw new Error('Client not initialized')
   return clientSocket
 }

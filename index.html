@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MultiBaileys Frontend</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --border-radius: 0.25rem;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f9;
+            color: var(--dark-color);
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        .card {
+            background: var(--light-color);
+            padding: 15px;
+            border-radius: var(--border-radius);
+            border: 1px solid #e3e3e3;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="url"], select, textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: var(--border-radius);
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 5px;
+            margin-top: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.danger { background-color: var(--danger-color); }
+        button.danger:hover { background-color: #c82333; }
+        button.success { background-color: var(--success-color); }
+        button.success:hover { background-color: #218838; }
+        button.secondary { background-color: var(--secondary-color); }
+        button.secondary:hover { background-color: #5a6268; }
+        #qr-code {
+            max-width: 250px;
+            margin-top: 15px;
+        }
+        #response-container {
+            margin-top: 20px;
+            background-color: #272822;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        #messaging-section {
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MultiBaileys Control Panel</h1>
+
+    <div class="card">
+        <h2>Authentication</h2>
+        <div class="form-group">
+            <label for="sessionId">Session ID</label>
+            <input type="text" id="sessionId" placeholder="Enter a unique session ID">
+        </div>
+        <button id="createSessionBtn">Create Session</button>
+        <button id="getQrBtn">Get QR</button>
+        <button id="checkStatusBtn" class="secondary">Check Status</button>
+        <button id="removeSessionBtn" class="danger">Remove Session</button>
+        <div id="auth-status"></div>
+        <div id="qr-display"></div>
+    </div>
+
+    <div id="messaging-section" class="card" style="margin-top: 20px;">
+        <h2>Messaging</h2>
+        <div class="grid">
+            <div>
+                <div class="form-group">
+                    <label for="jid">Recipient JID</label>
+                    <input type="text" id="jid" placeholder="e.g., 1234567890@s.whatsapp.net">
+                </div>
+                <div class="form-group">
+                    <label for="messageType">Message Type</label>
+                    <select id="messageType">
+                        <option value="text">Text</option>
+                        <option value="image">Image URL</option>
+                        <option value="video">Video URL</option>
+                        <option value="audio">Audio URL</option>
+                        <option value="document">Document URL</option>
+                        <option value="sticker">Sticker URL</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div class="form-group">
+                    <label for="messageId">Message ID (for Reply, Edit, React, Delete)</label>
+                    <input type="text" id="messageId" placeholder="The ID of the target message">
+                </div>
+                 <div class="form-group" id="url-group" style="display: none;">
+                    <label for="contentUrl">Content URL</label>
+                    <input type="text" id="contentUrl" placeholder="http://example.com/file.jpg">
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="messageContent">Content</label>
+            <textarea id="messageContent" rows="3" placeholder="Type your message, emoji, or new text here..."></textarea>
+        </div>
+        <button id="sendBtn" class="success">Send</button>
+        <button id="replyBtn">Reply</button>
+        <button id="editBtn">Edit</button>
+        <button id="reactBtn">React</button>
+        <button id="deleteBtn" class="danger">Delete</button>
+    </div>
+
+    <h2>API Response</h2>
+    <pre id="response-container">Responses from the server will appear here...</pre>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const API_BASE_URL = 'http://192.168.1.68:3000/api';
+
+        // DOM Elements
+        const sessionIdInput = document.getElementById('sessionId');
+        const createSessionBtn = document.getElementById('createSessionBtn');
+        const getQrBtn = document.getElementById('getQrBtn');
+        const checkStatusBtn = document.getElementById('checkStatusBtn');
+        const removeSessionBtn = document.getElementById('removeSessionBtn');
+        const authStatusDiv = document.getElementById('auth-status');
+        const qrDisplayDiv = document.getElementById('qr-display');
+        const responseContainer = document.getElementById('response-container');
+        
+        const messagingSection = document.getElementById('messaging-section');
+        const jidInput = document.getElementById('jid');
+        const messageIdInput = document.getElementById('messageId');
+        const messageTypeSelect = document.getElementById('messageType');
+        const messageContentInput = document.getElementById('messageContent');
+        const contentUrlInput = document.getElementById('contentUrl');
+        const urlGroup = document.getElementById('url-group');
+
+        const sendBtn = document.getElementById('sendBtn');
+        const replyBtn = document.getElementById('replyBtn');
+        const editBtn = document.getElementById('editBtn');
+        const reactBtn = document.getElementById('reactBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+
+        // Utility function to make API calls
+        async function fetchApi(endpoint, options = {}) {
+            const sessionId = sessionIdInput.value;
+            if (!sessionId && !endpoint.includes('/auth/create')) {
+                alert('Please enter a Session ID.');
+                return;
+            }
+
+            // Add sessionId to query params for GET requests
+            let url = `${API_BASE_URL}${endpoint}`;
+            if (options.method === 'GET' || !options.method) {
+                const params = new URLSearchParams({ sessionId });
+                url += `?${params}`;
+            }
+
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: { 'Content-Type': 'application/json', ...options.headers },
+                });
+                const result = await response.json();
+                displayResponse(result);
+                return result;
+            } catch (error) {
+                displayResponse({ error: error.message });
+            }
+        }
+
+        function displayResponse(data) {
+            responseContainer.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function setAuthStatus(message, type) {
+            authStatusDiv.textContent = message;
+            authStatusDiv.style.color = type === 'success' ? 'green' : 'red';
+            authStatusDiv.style.marginTop = '10px';
+        }
+        
+        // Event Listeners
+        messageTypeSelect.addEventListener('change', () => {
+            const selectedType = messageTypeSelect.value;
+            urlGroup.style.display = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType) ? 'block' : 'none';
+        });
+
+        createSessionBtn.addEventListener('click', async () => {
+            const sessionId = sessionIdInput.value;
+            if (!sessionId) {
+                alert('Session ID is required to create a session.');
+                return;
+            }
+            const result = await fetchApi('/auth/create', {
+                method: 'POST',
+                body: JSON.stringify({ sessionId })
+            });
+            if (result && result.sessionId) {
+                setAuthStatus(`Session '${result.sessionId}' created. Click 'Get QR' to authenticate.`, 'success');
+                messagingSection.style.display = 'block';
+            }
+        });
+
+        getQrBtn.addEventListener('click', async () => {
+            qrDisplayDiv.innerHTML = 'Requesting QR Code...';
+            const result = await fetchApi('/auth/qr', { method: 'GET' });
+            if (result) {
+                if (result.qr) {
+                    qrDisplayDiv.innerHTML = `<img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.qr)}" alt="QR Code">`;
+                    setAuthStatus('Scan the QR code with WhatsApp.', 'success');
+                } else if (result.success) {
+                    qrDisplayDiv.innerHTML = '';
+                    setAuthStatus('Session is already connected!', 'success');
+                } else {
+                     qrDisplayDiv.innerHTML = '';
+                }
+            }
+        });
+
+        checkStatusBtn.addEventListener('click', async () => {
+            const result = await fetchApi('/auth/status', { method: 'GET' });
+            if (result) {
+                const statusMessage = result.authenticated ? 'Session is authenticated.' : 'Session is not authenticated.';
+                const statusType = result.authenticated ? 'success' : 'danger';
+                setAuthStatus(statusMessage, statusType);
+            }
+        });
+        
+        removeSessionBtn.addEventListener('click', async () => {
+             if (!confirm('Are you sure you want to remove this session?')) return;
+             const result = await fetchApi('/auth/remove', {
+                 method: 'DELETE',
+                 body: JSON.stringify({ sessionId: sessionIdInput.value })
+             });
+             if (result && result.success) {
+                setAuthStatus(`Session '${sessionIdInput.value}' removed.`, 'success');
+                messagingSection.style.display = 'none';
+                qrDisplayDiv.innerHTML = '';
+                sessionIdInput.value = '';
+             }
+        });
+
+        // Messaging Actions
+        sendBtn.addEventListener('click', () => {
+            const type = messageTypeSelect.value;
+            const content = type === 'text' ? messageContentInput.value : contentUrlInput.value;
+            const body = {
+                sessionId: sessionIdInput.value,
+                jid: jidInput.value,
+                type: type,
+                content: content,
+                options: {} // Add any extra options if needed
+            };
+            fetchApi('/message/send', { method: 'POST', body: JSON.stringify(body) });
+        });
+
+        replyBtn.addEventListener('click', () => {
+            const body = {
+                sessionId: sessionIdInput.value,
+                jid: jidInput.value,
+                content: messageContentInput.value,
+                quotedMessageId: messageIdInput.value
+            };
+            fetchApi('/message/reply', { method: 'POST', body: JSON.stringify(body) });
+        });
+        
+        editBtn.addEventListener('click', () => {
+             const body = {
+                sessionId: sessionIdInput.value,
+                jid: jidInput.value,
+                messageId: messageIdInput.value,
+                newText: messageContentInput.value,
+            };
+            fetchApi('/message/edit', { method: 'POST', body: JSON.stringify(body) });
+        });
+
+        reactBtn.addEventListener('click', () => {
+            const body = {
+                sessionId: sessionIdInput.value,
+                jid: jidInput.value,
+                messageId: messageIdInput.value,
+                emoji: messageContentInput.value,
+            };
+            fetchApi('/message/react', { method: 'POST', body: JSON.stringify(body) });
+        });
+
+        deleteBtn.addEventListener('click', () => {
+            const body = {
+                sessionId: sessionIdInput.value,
+                jid: jidInput.value,
+                messageId: messageIdInput.value,
+            };
+            fetchApi('/message/delete', { method: 'POST', body: JSON.stringify(body) });
+        });
+    });
+</script>
+
+</body>
+</html>
