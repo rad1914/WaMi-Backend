@@ -1,17 +1,14 @@
 // @path: middlewares/checkSession.js
-import { getSession } from '../client/session.manager.js';
+import { getValidatedSessionId, safeGetSession } from '../utils/sessionUtil.js';
 
 export function checkSession(req, res, next) {
-  const sessionId = req.headers['x-session-id'];
-  if (!sessionId) {
-    return res.status(400).json({ error: 'sessionId is required' });
-  }
-
+  let sessionId;
   try {
-
-    req.sock = getSession(sessionId);
-    next();
+    sessionId = getValidatedSessionId(req);
+    req.sock = safeGetSession(sessionId);
+    return next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid sessionId' });
+    const status = err.message === 'sessionId is required' ? 400 : 401;
+    return res.status(status).json({ error: err.message });
   }
 }

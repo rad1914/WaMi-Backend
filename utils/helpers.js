@@ -12,7 +12,6 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-
       pendingQRs.set(sessionId, qr);
       logger.info(`📱 [${sessionId}] QR received`);
     }
@@ -41,7 +40,6 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
 
       if (shouldReconnect && typeof reinitFn === 'function') {
         try {
-
           await reinitFn(sessionId);
           logger.info(`🔄 [${sessionId}] reinitialized`);
         } catch (err) {
@@ -50,18 +48,4 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
       }
     }
   });
-};
-
-export const wrapController = fn => async (req, res) => {
-  try {
-    const input = req.method === 'GET' ? req.query : req.body;
-
-    res.json(await fn(input, req));
-  } catch (err) {
-    const payload = { error: err.message };
-    if (process.env.NODE_ENV === 'development') {
-      payload.stack = err.stack;
-    }
-    res.status(500).json(payload);
-  }
 };

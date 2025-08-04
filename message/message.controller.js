@@ -1,10 +1,22 @@
 // @path: message/message.controller.js
-import * as service from './message.service.js';
-import { wrapController } from '../utils/helpers.js';
+import * as svc from './message.service.js';
+import { wrapController } from '../utils/controller.js';
 
-export const send    = wrapController((body, req) => service.sendMessage(req.sock, body));
-export const reply   = wrapController((body, req) => service.replyToMessage(req.sock, body));
-export const forward = wrapController((body, req) => service.forwardMessage(req.sock, body));
-export const react   = wrapController((body, req) => service.reactToMessage(req.sock, body));
-export const remove  = wrapController((body, req) => service.deleteMessage(req.sock, body));
-export const edit    = wrapController((body, req) => service.editMessage(req.sock, body));
+export const send = wrapController((body, req) =>
+  svc.sendMessage(req.sock, body)
+);
+export const reply = wrapController((body, req) =>
+  svc.replyToMessage(req.sock, body)
+);
+export const forward = wrapController((body, req) =>
+  svc.forwardMessage(req.sock, body)
+);
+export const react = wrapController((body, req) =>
+  svc.reactToMessage(req.sock, body)
+);
+export const remove = wrapController((body, req) =>
+  svc.deleteMessage(req.sock, body)
+);
+export const edit = wrapController((body, req) =>
+  svc.editMessage(req.sock, body)
+);

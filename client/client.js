@@ -1,29 +1,48 @@
 // @path: client/client.js
-import { Boom } from '@hapi/boom'
-import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys'
-import { registerSocketEvents } from '../utils/helpers.js'
-import { initAuthState } from '../utils/sessionInit.js'
-import { store } from '../store/store.js'
-import logger from '../utils/logger.js'
 
-let clientSocket = null
+import fs from 'fs';
+import path from 'path';
+import { initAuthState } from '../utils/sessionInit.js';
+import { createSocket } from './socketFactory.js';
+import { store } from '../store/store.js';
+import logger from '../utils/logger.js';
+import { initSession } from './session.manager.js'; 
 
-export const initClient = async () => {
-  const { state, saveCreds } = await initAuthState('auth')
-  const { version } = await fetchLatestBaileysVersion()
+let sharedClient = null;
 
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    browser: Browsers.macOS('BaileysAPI')
-  })
+export async function initClient() {
 
-  store.bind(sock.ev)
-  registerSocketEvents(sock, 'shared', saveCreds, initClient)
-  clientSocket = sock
+  const sessionsDir = path.resolve('.sessions');
+  if (fs.existsSync(sessionsDir)) {
+    const subdirs = fs.readdirSync(sessionsDir, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name)
+
+      .filter(name => name !== 'auth');
+
+    for (const sessionId of subdirs) {
+      try {
+        await initSession(sessionId);
+        logger.info(`🔄 [bootstrap] reloaded session '${sessionId}'`);
+      } catch (err) {
+        logger.warn(`⚠️ [bootstrap] failed to reload session '${sessionId}': ${err.message}`);
+      }
+    }
+  }
+
+  const { state, saveCreds } = await initAuthState('auth');
+  const sock = await createSocket({
+    authState: { ...state, saveCreds },
+    sessionId: 'shared',
+    browserName: 'BaileysAPI',
+    reinit: initClient
+  });
+
+  store.bind(sock.ev);
+  sharedClient = sock;
 }
 
-export const getClient = () => {
-  if (!clientSocket) throw new Error('Client not initialized')
-  return clientSocket
+export function getClient() {
+  if (!sharedClient) throw new Error('Client not initialized');
+  return sharedClient;
 }

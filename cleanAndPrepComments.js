@@ -13,7 +13,7 @@ function toPosixPath(path) {
 
 function getFileType(ext) {
   ext = ext.toLowerCase();
-  if (ext === '.js' || ext === '.kt') return 'code';
+  if (ext === '.js' || ext === '.kt' || ext === '.sh') return 'code';
   if (ext === '.xml') return 'xml';
   if (ext === '.html') return 'html';
   return null;
@@ -42,14 +42,21 @@ async function processFile(filePath) {
     return;
   }
 
-  let commentLine = (fileType === 'xml' || fileType === 'html')
-    ? `<!-- @path: ${relPath} -->\n`
-    : `// @path: ${relPath}\n`;
+  // Choose the correct comment prefix
+  let commentLine;
+  if (fileType === 'xml' || fileType === 'html') {
+    commentLine = `<!-- @path: ${relPath} -->\n`;
+  } else if (ext === '.sh') {
+    commentLine = `# @path: ${relPath}\n`;
+  } else {
+    commentLine = `// @path: ${relPath}\n`;
+  }
 
   const pathCommentRegex = buildExactPathCommentRegex(commentLine);
   const header = content.slice(0, 500);
 
   if (!pathCommentRegex.test(header)) {
+    // XML declaration handling
     if ((fileType === 'xml' || fileType === 'html') && content.startsWith('<?xml')) {
       const endDecl = content.indexOf('?>');
       if (endDecl !== -1) {
@@ -69,28 +76,36 @@ async function processFile(filePath) {
 
   if (fileType === 'code') {
     content = content
-      // Mantener sólo los bloques /* ... */ si contienen @path:
+      // Keep only /*…*/ blocks if they contain @path:
       .replace(/\/\*[\s\S]*?\*\//g, m => m.includes('@path:') ? m : '')
-      // Mantener sólo las líneas // si contienen @path:
+      // Keep only // lines if they contain @path:
       .replace(/^\s*\/\/.*$/gm, line => line.includes('@path:') ? line : '')
-      // Eliminar comentarios inline // que no contengan @path:
+      // Keep only # lines if they contain @path (for .sh):
+      .replace(/^\s*#.*$/gm, line => line.includes('@path:') ? line : '')
+      // Remove inline // comments that don’t contain @path:
       .replace(/([^:"'\n])\/\/(?!.*@path:).*$/gm, (_, p) => p.trimEnd())
-      // Eliminar marcas de cita
+      // Remove citation marks:
       .replace(/\[cite\s*:\s*\d+(?:\s*,\s*\d+)*\]/g, '')
       .replace(/\[cite(?:_start|_end)?\]/g, '')
-      // Eliminar bloques span (inline o multilínea) junto a su contenido
-      .replace(/\[span_\d+\]\(start_span\)[\s\S]*?\[span_\d+\]\(end_span\)/g, '')
-      // Quitar líneas que hayan quedado vacías
+      // Remove all span markers (start or end), even if nested/misaligned:
+      .replace(/\[span_\d+\]\((?:start|end)_span\)/g, '')
+      // Drop any now-empty lines:
       .replace(/^\s*$/gm, '');
   } else if (fileType === 'xml' || fileType === 'html') {
     content = content
-      // Mantener sólo los comentarios <!-- ... --> que contengan @path:
+      // Keep only <!--…--> comments with @path:
       .replace(/<!--[\s\S]*?-->/g, m => m.includes('@path:') ? m : '');
   }
 
-  // Reducir saltos de línea excesivos
+  // Debug: warn if any span markers still exist
+  if (content.includes('[span_')) {
+    console.warn(`⚠️ Unremoved spans in ${relPath}`);
+  }
+
+  // Collapse excessive blank lines to at most two in a row
   content = content.replace(/\n{3,}/g, '\n\n');
-  // Asegurar salto final
+
+  // Ensure final newline
   if (!content.endsWith('\n')) content += '\n';
 
   try {
@@ -102,13 +117,15 @@ async function processFile(filePath) {
 }
 
 async function main() {
-  const pattern = process.argv[2] || '**/*.{js,kt,xml,html}';
+  const pattern = process.argv[2] || '**/*.{js,kt,xml,html,sh}';
   let entries = await fg(pattern, {
     dot: true,
     ignore: ['node_modules/**'],
   });
 
-  entries = entries.map(toPosixPath).filter(f => f !== scriptRelPath);
+  entries = entries
+    .map(toPosixPath)
+    .filter(f => f !== scriptRelPath);
 
   if (!entries.length) {
     console.warn('No files found for pattern:', pattern);
