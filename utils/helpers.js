@@ -12,7 +12,7 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      // cache the latest QR so /api/auth/qr can return it
+
       pendingQRs.set(sessionId, qr);
       logger.info(`📱 [${sessionId}] QR received`);
     }
@@ -32,7 +32,6 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
         `❌ [${sessionId}] disconnected (${lastDisconnect?.error?.message}). Reconnect=${shouldReconnect}`
       );
 
-      // persist creds on every disconnect
       try {
         await saveCreds();
         logger.info(`💾 [${sessionId}] credentials saved`);
@@ -42,7 +41,7 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
 
       if (shouldReconnect && typeof reinitFn === 'function') {
         try {
-          // force-reinit this single session
+
           await reinitFn(sessionId);
           logger.info(`🔄 [${sessionId}] reinitialized`);
         } catch (err) {

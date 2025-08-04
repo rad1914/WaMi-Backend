@@ -18,13 +18,13 @@ export const getSession = id => {
 };
 
 export const initSession = async (id, force = false) => {
-  // if already initialized and not forced, return it
+
   if (sessions.has(id) && !force) {
     return sessions.get(id);
   }
 
   try {
-    // load or create auth state on disk
+
     const authDir = path.resolve('.sessions', id);
     const { state, saveCreds } = await initAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -37,12 +37,11 @@ export const initSession = async (id, force = false) => {
       printQRInTerminal: false
     });
 
-    // bind reconnection handlers
     registerSocketEvents(
       sock,
       id,
       saveCreds,
-      // on disconnect, reinit this session
+
       () => initSession(id, true)
     );
 
@@ -61,7 +60,6 @@ export const deleteSession = async id => {
   }
   sessions.delete(id);
 
-  // remove on-disk auth folder
   const dir = path.resolve('.sessions', id);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
