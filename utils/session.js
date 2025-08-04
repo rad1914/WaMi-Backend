@@ -1,46 +1,28 @@
-// @path: utils/session.js (merged)
+// @path: utils/session.js
+import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
-import { getSession as _getSession } from '../client/session.manager.js';
-import { requireSessionId } from './errorGuards.js';
+import { getSession } from '../client/session.manager.js';
+import { SESSION_BASE_DIR } from '../config/config.js';
+
+function extractSessionId(req) {
+  const id =
+    req.headers['x-session-id'] ||
+    req.body?.sessionId ||
+    req.query?.sessionId;
+  if (!id) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  return id;
+}
 
 export function extractSock(req) {
-  const sessionId =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-
-  if (!sessionId) {
-    const err = new Error('sessionId is required');
-    err.status = 400;
-    throw err;
-  }
-
+  const id = extractSessionId(req);
   try {
-    return _getSession(sessionId);
+    return getSession(id);
   } catch {
-    const err = new Error('Invalid sessionId');
-    err.status = 401;
-    throw err;
+    throw Object.assign(new Error('Invalid sessionId'), { status: 401 });
   }
 }
 
-export const initAuthState = async (sessionPath) => {
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-  return { state, saveCreds };
-};
-
-export function getValidatedSessionId(req) {
-  const sessionId =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-  return requireSessionId(sessionId);
-}
-
-export function safeGetSession(sessionId) {
-  try {
-    return _getSession(sessionId);
-  } catch {
-    throw new Error('Invalid sessionId');
-  }
+export async function initAuthState(subDir = 'auth') {
+  const dir = path.resolve(SESSION_BASE_DIR, subDir);
+  return useMultiFileAuthState(dir);
 }

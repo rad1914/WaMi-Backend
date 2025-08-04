@@ -1,25 +1,30 @@
 // @path: client/session.manager.js
-import path from 'path';
-import fs from 'fs';
-import { initAuthState } from '../utils/session.js';
 import { createSocket } from './socketFactory.js';
+import { initAuthState } from '../utils/session.js';
+import { store } from '../store/store.js';
+import { saveStore } from '../utils/store.js';
 
 const sessions = new Map();
 
 export async function initSession(id, force = false) {
-  if (sessions.has(id) && !force) {
+  if (!force && sessions.has(id)) {
     return sessions.get(id);
   }
-  const authDir = path.resolve('.sessions', id);
-  const { state, saveCreds } = await initAuthState(authDir);
+
+  const { state, saveCreds } = await initAuthState(id);
   const sock = await createSocket({
-    authState: { ...state, saveCreds },
-    sessionId: id,
-    browserName: 'MultiBaileys',
-    reinit: () => initSession(id, true)
+    authState:  { ...state, saveCreds },
+    sessionId:  id,
+    browserName:'MultiBaileys',
+    reinit:     () => initSession(id, true)
   });
-  sessions.set(id, { sock, saveCreds });
-  return { sock, saveCreds };
+
+  store.bind(sock.ev);
+  sock.ev.on('creds.update', () => saveStore(store));
+
+  const entry = { sock, saveCreds };
+  sessions.set(id, entry);
+  return entry;
 }
 
 export function getSession(id) {
@@ -30,14 +35,10 @@ export function getSession(id) {
 
 export async function deleteSession(id) {
   const entry = sessions.get(id);
-  if (entry?.sock?.logout) {
-    await entry.sock.logout();
-  }
+  if (entry?.sock?.logout) await entry.sock.logout();
   sessions.delete(id);
-  const dir = path.resolve('.sessions', id);
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-}
-
-export function getSessions() {
-  return [...sessions.keys()];
+  const dir = await import('path').then(p => p.resolve('.sessions', id));
+  await import('fs').then(fs => {
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  });
 }

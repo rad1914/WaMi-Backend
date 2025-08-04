@@ -1,43 +1,31 @@
 // @path: client/client.js
-import fs from 'fs'
-import path from 'path'
-import { initAuthState } from '../utils/session.js'
-import { createSocket } from './socketFactory.js'
-import { store } from '../store/store.js'
-import logger from '../utils/logger.js'
+import logger from '../utils/logger.js';
+import { store } from '../store/store.js';
+import { saveStore } from '../utils/store.js';
+import { createSocket } from './socketFactory.js';
+import { initAuthState } from '../utils/session.js';
 
-let sharedClient = null
+let sharedClient = null;
 
 export async function initClient() {
-  const { state, saveCreds } = await initAuthState('auth')
-
+  const { state, saveCreds } = await initAuthState('auth');
   const sock = await createSocket({
-    authState: { ...state, saveCreds },
-    sessionId: 'shared',
-    browserName: 'BaileysAPI',
-    reinit: initClient
-  })
+    authState:  { ...state, saveCreds },
+    sessionId:  'shared',
+    browserName:'BaileysAPI',
+    reinit:     initClient
+  });
 
-  store.bind(sock.ev)
-
+  store.bind(sock.ev);
   sock.ev.on('creds.update', () => {
-    try {
-      fs.writeFileSync(
-        './.sessions/store.json',
-        JSON.stringify({
-          chats: [...store.chats.entries()],
-          contacts: store.contacts
-        })
-      )
-    } catch (e) {
-      logger.warn('⚠️ Error persisting store:', e)
-    }
-  })
+    logger.info('Shared credentials updated');
+    saveStore(store);
+  });
 
-  sharedClient = sock
+  sharedClient = sock;
 }
 
 export function getClient() {
-  if (!sharedClient) throw new Error('Client not initialized')
-  return sharedClient
+  if (!sharedClient) throw new Error('Client not initialized');
+  return sharedClient;
 }

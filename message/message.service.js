@@ -11,37 +11,22 @@ const getPayload = (type, content, options) => ({
   edit:     { edit: content }
 }[type]);
 
-export const sendMessage = async (sock, { jid, type, content, options }) => {
-  const payload = getPayload(type, content, options);
-  return sock.sendMessage(jid, payload, options);
-};
+export const sendMessage = (sock, { jid, type, content, options }) =>
+  sock.sendMessage(jid, getPayload(type, content, options), options);
 
 export const replyToMessage = async (sock, { jid, content, quotedMessageId, type = 'text' }) => {
-
-  const messages = await sock.store?.loadMessages(jid, 50);
-  const quoted = messages?.messages.find(m => m.key?.id === quotedMessageId);
-  const payload = getPayload(type, content);
-  return sock.sendMessage(jid, payload, { quoted });
+  const quoted = (await sock.store?.loadMessages(jid, 50))?.messages.find(m => m.key?.id === quotedMessageId);
+  return sock.sendMessage(jid, getPayload(type, content), { quoted });
 };
 
-export const forwardMessage = async (sock, { to, message }) => {
-  return sock.relayMessage(to, message, { messageId: message.key?.id });
-};
+export const forwardMessage = (sock, { to, message }) =>
+  sock.relayMessage(to, message, { messageId: message.key?.id });
 
-export const reactToMessage = async (sock, { jid, messageId, emoji }) => {
-  const content = { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } };
-  return sock.sendMessage(jid, { react: content });
-};
+export const reactToMessage = (sock, { jid, messageId, emoji }) =>
+  sock.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } } });
 
-export const deleteMessage = async (sock, { jid, messageId, fromMe = true }) => {
-  return sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe, id: messageId } });
-};
+export const deleteMessage = (sock, { jid, messageId, fromMe = true }) =>
+  sock.sendMessage(jid, { delete: { remoteJid: jid, id: messageId, fromMe } });
 
-export const editMessage = async (sock, { jid, messageId, newText }) => {
-  return sock.sendMessage(jid, {
-    edit: {
-      message: { conversation: newText },
-      key: { remoteJid: jid, fromMe: true, id: messageId }
-    }
-  });
-};
+export const editMessage = (sock, { jid, messageId, newText }) =>
+  sock.sendMessage(jid, { edit: { message: { conversation: newText }, key: { remoteJid: jid, id: messageId, fromMe: true } } });

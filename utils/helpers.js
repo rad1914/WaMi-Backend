@@ -4,46 +4,39 @@ import { DisconnectReason } from '@whiskeysockets/baileys';
 import logger from './logger.js';
 
 const pendingQRs = new Map();
+export const getPendingQR = id => pendingQRs.get(id) || null;
 
-export const getPendingQR = sessionId => pendingQRs.get(sessionId) || null;
-
-export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
-  sock.ev.on('connection.update', async update => {
-    const { connection, lastDisconnect, qr } = update;
-
+export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      pendingQRs.set(sessionId, qr);
-      logger.info(`📱 [${sessionId}] QR received`);
+      pendingQRs.set(id, qr);
+      logger.info(`📱 [${id}] QR received`);
     }
 
     if (connection === 'open') {
-      logger.info(`✅ [${sessionId}] connected`);
-      pendingQRs.delete(sessionId);
+      logger.info(`✅ [${id}] connected`);
+      pendingQRs.delete(id);
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        !lastDisconnect?.error ||
-        (lastDisconnect.error instanceof Boom &&
-          lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut);
+      const err = lastDisconnect?.error;
+      const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
 
-      logger.warn(
-        `❌ [${sessionId}] disconnected (${lastDisconnect?.error?.message}). Reconnect=${shouldReconnect}`
-      );
+      logger.warn(`❌ [${id}] disconnected (${err?.message}). Reconnect=${reconnect}`);
 
       try {
         await saveCreds();
-        logger.info(`💾 [${sessionId}] credentials saved`);
+        logger.info(`💾 [${id}] credentials saved`);
       } catch (e) {
-        logger.error(`🔒 [${sessionId}] failed to save credentials`, e);
+        logger.error(`🔒 [${id}] failed to save credentials`, e);
       }
 
-      if (shouldReconnect && typeof reinitFn === 'function') {
+      if (reconnect && typeof reinit === 'function') {
         try {
-          await reinitFn(sessionId);
-          logger.info(`🔄 [${sessionId}] reinitialized`);
-        } catch (err) {
-          logger.error(`❌ [${sessionId}] reinit failed`, err);
+          await reinit(id);
+          logger.info(`🔄 [${id}] reinitialized`);
+        } catch (e) {
+          logger.error(`❌ [${id}] reinit failed`, e);
         }
       }
     }

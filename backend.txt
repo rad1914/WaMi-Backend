@@ -12,34 +12,15 @@ export function checkSession(req, res, next) {
   }
 }
 // @path: store/store.js
-import { existsSync, readFileSync } from 'fs';
-import baileys from '@whiskeysockets/baileys';
+import { makeInMemoryStore, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
 import logger from '../utils/logger.js';
-
-const { makeInMemoryStore, makeCacheableSignalKeyStore } = baileys;
-const STORE_PATH = './.sessions/store.json';
+import { loadStore } from '../utils/store.js';
 
 export const store = makeInMemoryStore({ logger });
 
-if (existsSync(STORE_PATH)) {
-  try {
-    const { chats, contacts } = JSON.parse(readFileSync(STORE_PATH, 'utf-8'));
-    if (Array.isArray(chats)) store.chats = new Map(chats);
-    if (contacts) store.contacts = contacts;
-  } catch (e) {
-    console.warn('⚠️ Error loading store:', e);
-  }
-}
-
-export async function initAuthStore() {
-  const { state, saveCreds } = await initAuthState('auth');
-  const signalKeyStore = makeCacheableSignalKeyStore(
-    state.signalKeyStore || {},
-    saveCreds
-  );
-  registerSocketEvents(store, 'shared', saveCreds, initAuthStore);
-  return { authState: state, signalKeyStore };
-}
+const { chats, contacts } = loadStore();
+if (Array.isArray(chats))  store.chats    = new Map(chats);
+if (contacts)              store.contacts = contacts;
 // @path: message/message.routes.js
 import { Router } from 'express';
 import { checkSession } from '../middlewares/checkSession.js';
@@ -86,40 +67,25 @@ const getPayload = (type, content, options) => ({
   edit:     { edit: content }
 }[type]);
 
-export const sendMessage = async (sock, { jid, type, content, options }) => {
-  const payload = getPayload(type, content, options);
-  return sock.sendMessage(jid, payload, options);
-};
+export const sendMessage = (sock, { jid, type, content, options }) =>
+  sock.sendMessage(jid, getPayload(type, content, options), options);
 
 export const replyToMessage = async (sock, { jid, content, quotedMessageId, type = 'text' }) => {
-
-  const messages = await sock.store?.loadMessages(jid, 50);
-  const quoted = messages?.messages.find(m => m.key?.id === quotedMessageId);
-  const payload = getPayload(type, content);
-  return sock.sendMessage(jid, payload, { quoted });
+  const quoted = (await sock.store?.loadMessages(jid, 50))?.messages.find(m => m.key?.id === quotedMessageId);
+  return sock.sendMessage(jid, getPayload(type, content), { quoted });
 };
 
-export const forwardMessage = async (sock, { to, message }) => {
-  return sock.relayMessage(to, message, { messageId: message.key?.id });
-};
+export const forwardMessage = (sock, { to, message }) =>
+  sock.relayMessage(to, message, { messageId: message.key?.id });
 
-export const reactToMessage = async (sock, { jid, messageId, emoji }) => {
-  const content = { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } };
-  return sock.sendMessage(jid, { react: content });
-};
+export const reactToMessage = (sock, { jid, messageId, emoji }) =>
+  sock.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } } });
 
-export const deleteMessage = async (sock, { jid, messageId, fromMe = true }) => {
-  return sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe, id: messageId } });
-};
+export const deleteMessage = (sock, { jid, messageId, fromMe = true }) =>
+  sock.sendMessage(jid, { delete: { remoteJid: jid, id: messageId, fromMe } });
 
-export const editMessage = async (sock, { jid, messageId, newText }) => {
-  return sock.sendMessage(jid, {
-    edit: {
-      message: { conversation: newText },
-      key: { remoteJid: jid, fromMe: true, id: messageId }
-    }
-  });
-};
+export const editMessage = (sock, { jid, messageId, newText }) =>
+  sock.sendMessage(jid, { edit: { message: { conversation: newText }, key: { remoteJid: jid, id: messageId, fromMe: true } } });
 // @path: routes.js
 import { Router } from 'express';
 import authRoutes from './auth/auth.routes.js';
@@ -130,6 +96,7 @@ export default Router()
   .use('/message', msgRoutes);
 // @path: auth/auth.service.js
 import { initSession, deleteSession, getSession } from '../client/session.manager.js';
+import { getPendingQR } from '../utils/helpers.js';
 import { randomUUID } from 'crypto';
 
 export async function createSession() {
@@ -145,17 +112,28 @@ export async function removeSession({ sessionId }) {
 }
 
 export async function getQRCode({ sessionId }) {
-  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  if (!sessionId) {
+    throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  }
 
-  const sock = await initSession(sessionId);
-  const qr = sock.ev.pendingQR;
-  if (sock.user?.id) return { success: true };
-  if (qr) return { qr };
+  const { sock } = await initSession(sessionId);
+
+  if (sock.user?.id) {
+    return { success: true };
+  }
+
+  const qr = getPendingQR(sessionId);
+  if (qr) {
+    return { qr };
+  }
+
   throw Object.assign(new Error('QR not yet available'), { status: 404 });
 }
 
 export function checkAuth({ sessionId }) {
-  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  if (!sessionId) {
+    throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  }
   const client = getSession(sessionId);
   return { authenticated: !!client.user?.id };
 }
@@ -226,46 +204,39 @@ import { DisconnectReason } from '@whiskeysockets/baileys';
 import logger from './logger.js';
 
 const pendingQRs = new Map();
+export const getPendingQR = id => pendingQRs.get(id) || null;
 
-export const getPendingQR = sessionId => pendingQRs.get(sessionId) || null;
-
-export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
-  sock.ev.on('connection.update', async update => {
-    const { connection, lastDisconnect, qr } = update;
-
+export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      pendingQRs.set(sessionId, qr);
-      logger.info(`📱 [${sessionId}] QR received`);
+      pendingQRs.set(id, qr);
+      logger.info(`📱 [${id}] QR received`);
     }
 
     if (connection === 'open') {
-      logger.info(`✅ [${sessionId}] connected`);
-      pendingQRs.delete(sessionId);
+      logger.info(`✅ [${id}] connected`);
+      pendingQRs.delete(id);
     }
 
     if (connection === 'close') {
-      const shouldReconnect =
-        !lastDisconnect?.error ||
-        (lastDisconnect.error instanceof Boom &&
-          lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut);
+      const err = lastDisconnect?.error;
+      const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
 
-      logger.warn(
-        `❌ [${sessionId}] disconnected (${lastDisconnect?.error?.message}). Reconnect=${shouldReconnect}`
-      );
+      logger.warn(`❌ [${id}] disconnected (${err?.message}). Reconnect=${reconnect}`);
 
       try {
         await saveCreds();
-        logger.info(`💾 [${sessionId}] credentials saved`);
+        logger.info(`💾 [${id}] credentials saved`);
       } catch (e) {
-        logger.error(`🔒 [${sessionId}] failed to save credentials`, e);
+        logger.error(`🔒 [${id}] failed to save credentials`, e);
       }
 
-      if (shouldReconnect && typeof reinitFn === 'function') {
+      if (reconnect && typeof reinit === 'function') {
         try {
-          await reinitFn(sessionId);
-          logger.info(`🔄 [${sessionId}] reinitialized`);
-        } catch (err) {
-          logger.error(`❌ [${sessionId}] reinit failed`, err);
+          await reinit(id);
+          logger.info(`🔄 [${id}] reinitialized`);
+        } catch (e) {
+          logger.error(`❌ [${id}] reinit failed`, e);
         }
       }
     }
@@ -316,56 +287,64 @@ const logger = pino({
 })
 
 export default logger
+// @path: utils/store.js
+import fs from 'fs';
+import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js';
+
+export function loadStore() {
+  try {
+    if (!fs.existsSync(STORE_FILE)) return {};
+    return JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
+  } catch (e) {
+    console.warn('⚠️ Error loading store:', e);
+    return {};
+  }
+}
+
+export function saveStore(store) {
+  try {
+    const data = {
+      chats:    [...store.chats.entries()],
+      contacts: store.contacts
+    };
+    if (!fs.existsSync(SESSION_BASE_DIR)) fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+    fs.writeFileSync(STORE_FILE, JSON.stringify(data));
+  } catch (e) {
+    console.warn('⚠️ Error persisting store:', e);
+  }
+}
 // @path: utils/errorGuards.js
 export function requireSessionId(sessionId) {
   if (!sessionId) throw new Error('sessionId is required');
   return sessionId;
 }
-// @path: utils/session.js (merged)
+// @path: utils/session.js
+import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
-import { getSession as _getSession } from '../client/session.manager.js';
-import { requireSessionId } from './errorGuards.js';
+import { getSession } from '../client/session.manager.js';
+import { SESSION_BASE_DIR } from '../config/config.js';
+
+function extractSessionId(req) {
+  const id =
+    req.headers['x-session-id'] ||
+    req.body?.sessionId ||
+    req.query?.sessionId;
+  if (!id) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  return id;
+}
 
 export function extractSock(req) {
-  const sessionId =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-
-  if (!sessionId) {
-    const err = new Error('sessionId is required');
-    err.status = 400;
-    throw err;
-  }
-
+  const id = extractSessionId(req);
   try {
-    return _getSession(sessionId);
+    return getSession(id);
   } catch {
-    const err = new Error('Invalid sessionId');
-    err.status = 401;
-    throw err;
+    throw Object.assign(new Error('Invalid sessionId'), { status: 401 });
   }
 }
 
-export const initAuthState = async (sessionPath) => {
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-  return { state, saveCreds };
-};
-
-export function getValidatedSessionId(req) {
-  const sessionId =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-  return requireSessionId(sessionId);
-}
-
-export function safeGetSession(sessionId) {
-  try {
-    return _getSession(sessionId);
-  } catch {
-    throw new Error('Invalid sessionId');
-  }
+export async function initAuthState(subDir = 'auth') {
+  const dir = path.resolve(SESSION_BASE_DIR, subDir);
+  return useMultiFileAuthState(dir);
 }
 // @path: client/socketFactory.js
 import {
@@ -399,27 +378,32 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   return sock;
 }
 // @path: client/session.manager.js
-import path from 'path';
-import fs from 'fs';
-import { initAuthState } from '../utils/session.js';
 import { createSocket } from './socketFactory.js';
+import { initAuthState } from '../utils/session.js';
+import { store } from '../store/store.js';
+import { saveStore } from '../utils/store.js';
 
 const sessions = new Map();
 
 export async function initSession(id, force = false) {
-  if (sessions.has(id) && !force) {
+  if (!force && sessions.has(id)) {
     return sessions.get(id);
   }
-  const authDir = path.resolve('.sessions', id);
-  const { state, saveCreds } = await initAuthState(authDir);
+
+  const { state, saveCreds } = await initAuthState(id);
   const sock = await createSocket({
-    authState: { ...state, saveCreds },
-    sessionId: id,
-    browserName: 'MultiBaileys',
-    reinit: () => initSession(id, true)
+    authState:  { ...state, saveCreds },
+    sessionId:  id,
+    browserName:'MultiBaileys',
+    reinit:     () => initSession(id, true)
   });
-  sessions.set(id, { sock, saveCreds });
-  return { sock, saveCreds };
+
+  store.bind(sock.ev);
+  sock.ev.on('creds.update', () => saveStore(store));
+
+  const entry = { sock, saveCreds };
+  sessions.set(id, entry);
+  return entry;
 }
 
 export function getSession(id) {
@@ -430,57 +414,46 @@ export function getSession(id) {
 
 export async function deleteSession(id) {
   const entry = sessions.get(id);
-  if (entry?.sock?.logout) {
-    await entry.sock.logout();
-  }
+  if (entry?.sock?.logout) await entry.sock.logout();
   sessions.delete(id);
-  const dir = path.resolve('.sessions', id);
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-}
-
-export function getSessions() {
-  return [...sessions.keys()];
+  const dir = await import('path').then(p => p.resolve('.sessions', id));
+  await import('fs').then(fs => {
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+  });
 }
 // @path: client/client.js
-import fs from 'fs'
-import path from 'path'
-import { initAuthState } from '../utils/session.js'
-import { createSocket } from './socketFactory.js'
-import { store } from '../store/store.js'
-import logger from '../utils/logger.js'
+import logger from '../utils/logger.js';
+import { store } from '../store/store.js';
+import { saveStore } from '../utils/store.js';
+import { createSocket } from './socketFactory.js';
+import { initAuthState } from '../utils/session.js';
 
-let sharedClient = null
+let sharedClient = null;
 
 export async function initClient() {
-  const { state, saveCreds } = await initAuthState('auth')
-
+  const { state, saveCreds } = await initAuthState('auth');
   const sock = await createSocket({
-    authState: { ...state, saveCreds },
-    sessionId: 'shared',
-    browserName: 'BaileysAPI',
-    reinit: initClient
-  })
+    authState:  { ...state, saveCreds },
+    sessionId:  'shared',
+    browserName:'BaileysAPI',
+    reinit:     initClient
+  });
 
-  store.bind(sock.ev)
-
+  store.bind(sock.ev);
   sock.ev.on('creds.update', () => {
-    try {
-      fs.writeFileSync(
-        './.sessions/store.json',
-        JSON.stringify({
-          chats: [...store.chats.entries()],
-          contacts: store.contacts
-        })
-      )
-    } catch (e) {
-      logger.warn('⚠️ Error persisting store:', e)
-    }
-  })
+    logger.info('Shared credentials updated');
+    saveStore(store);
+  });
 
-  sharedClient = sock
+  sharedClient = sock;
 }
 
 export function getClient() {
-  if (!sharedClient) throw new Error('Client not initialized')
-  return sharedClient
+  if (!sharedClient) throw new Error('Client not initialized');
+  return sharedClient;
 }
+// @path: config/config.js
+import path from 'path';
+
+export const SESSION_BASE_DIR = path.resolve('.sessions');
+export const STORE_FILE        = path.join(SESSION_BASE_DIR, 'store.json');
