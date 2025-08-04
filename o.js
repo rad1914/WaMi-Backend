@@ -2,7 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 
-const inputFile = 'big.txt'
+const inputFile = 'backend.txt'
 
 const raw = fs.readFileSync(inputFile, 'utf-8')
 

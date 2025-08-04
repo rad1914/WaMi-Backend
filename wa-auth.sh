@@ -1,48 +1,154 @@
-#!/usr/bin/env bash
+#!/bin/bash
+
 set -euo pipefail
 
-API_URL="http://localhost:3000/api/auth"
+API_BASE_URL="http://localhost:3000/api"
+AUTH_URL="$API_BASE_URL/auth"
+MESSAGE_URL="$API_BASE_URL/message"
 
-echo "🔧 Creando nueva sesión…"
-resp=$(curl -s -X POST "$API_URL/create" \
-  -H "Content-Type: application/json")
+# Function to check for required commands
+command_exists() {
+    command -v "$1" &> /dev/null
+}
+
+if ! command_exists jq; then
+    echo "❌ Error: 'jq' is not installed."
+    echo "Please install jq to run this script (e.g., 'sudo apt-get install jq' or 'brew install jq')."
+    exit 1
+fi
+
+if ! command_exists qrencode; then
+    echo "❌ Error: 'qrencode' is not installed."
+    echo "Please install qrencode to run this script (e.g., 'sudo apt-get install qrencode' or 'brew install qrencode')."
+    exit 1
+fi
+
+echo "🔧 1. Creating new session…"
+resp=$(curl -s -X POST "$AUTH_URL/create" -H "Content-Type: application/json")
 sessionId=$(echo "$resp" | jq -r '.sessionId')
 
 if [[ -z "$sessionId" || "$sessionId" == "null" ]]; then
-  echo "❌ Error al crear sesión: $resp"
+  echo "❌ Failed to create session. Response: $resp"
   exit 1
 fi
 
-echo "✅ sessionId: $sessionId"
+echo "✅ Session created. sessionId: $sessionId"
 echo
-echo "📲 Solicitando QR…"
 
-# Bucle hasta recibir { qr: "..."} o { success: true }
+echo "📲 2. Requesting QR code for authentication…"
+
+current_qr=""
 while true; do
-  resp=$(curl -s "$API_URL/qr?sessionId=$sessionId")
+    # Check authentication status
+    auth_status_resp=$(curl -s "$AUTH_URL/status?sessionId=$sessionId")
+    authenticated=$(echo "$auth_status_resp" | jq -r '.authenticated')
 
-  # Si viene el campo qr, lo mostramos y salimos
-  if echo "$resp" | jq -e '.qr' >/dev/null 2>&1; then
-    qr=$(echo "$resp" | jq -r '.qr')
-    echo
-    echo "🖼️  QR recibido:"
-    echo "$qr"
-    break
+    if [[ "$authenticated" == "true" ]]; then
+        echo "✅ Authentication complete."
+        break
+    fi
 
-  # Si ya está autenticado, detectamos success y salimos
-  elif echo "$resp" | jq -e '.success == true' >/dev/null 2>&1; then
-    echo
-    echo "⚡ Ya estaba autenticado (success:true)."
-    break
-  fi
+    # If not authenticated, get the QR code
+    qr_resp=$(curl -s "$AUTH_URL/qr?sessionId=$sessionId")
+    qr=$(echo "$qr_resp" | jq -r '.qr')
 
-  # Si no, seguimos esperando
-  echo -n "."
-  sleep 1
+    # Display QR code if it's new
+    if [[ -n "$qr" && "$qr" != "null" && "$qr" != "$current_qr" ]]; then
+        echo
+        echo "🖼️  QR Code Received. Please scan with your WhatsApp mobile app."
+        qrencode -t UTF8 "$qr"
+        echo
+        echo "Waiting for authentication..."
+        current_qr="$qr"
+    fi
+
+    # Wait before polling again
+    sleep 5
 done
 
 echo
-echo "⏳ Verificando estado de autenticación…"
-status=$(curl -s "$API_URL/status?sessionId=$sessionId" | jq -r '.authenticated')
+echo "✅ Authentication process finished."
+echo
 
-echo "🔒 authenticated: $status"
+echo "⏳ 3. Verifying authentication status…"
+status=$(curl -s "$AUTH_URL/status?sessionId=$sessionId" | jq -r '.authenticated')
+echo "🔒 Status: authenticated: $status"
+if [[ "$status" != "true" ]]; then
+    echo "❌ Authentication failed. Exiting."
+    exit 1
+fi
+echo
+
+echo "🚀 4. Starting messaging endpoint tests…"
+read -p "Enter the WhatsApp JID to send test messages to (e.g., 5211234567890@s.whatsapp.net): " jid
+
+if [[ -z "$jid" ]]; then
+    echo "❌ JID is required to proceed with messaging tests."
+    exit 1
+fi
+
+SESSION_HEADER="-H \"x-session-id: $sessionId\""
+CONTENT_HEADER="-H \"Content-Type: application/json\""
+
+echo "   - 📝 Test: POST /message/send (text)"
+send_resp=$(curl -s -X POST "$MESSAGE_URL/send" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"jid\": \"$jid\", \"type\": \"text\", \"content\": \"Hello from the test script! 👋\"}")
+messageId=$(echo "$send_resp" | jq -r '.key.id')
+if [[ -z "$messageId" || "$messageId" == "null" ]]; then
+    echo "   ❌ FAILED to send text message. Response: $send_resp"
+    exit 1
+fi
+echo "   ✅ Sent. Message ID: $messageId"
+sleep 2
+
+echo "   - ↪️  Test: POST /message/reply"
+curl -s -X POST "$MESSAGE_URL/reply" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"jid\": \"$jid\", \"content\": \"This is a reply.\", \"quotedMessageId\": \"$messageId\"}" > /dev/null
+echo "   ✅ Reply sent."
+sleep 2
+
+echo "   - 👍 Test: POST /message/react"
+curl -s -X POST "$MESSAGE_URL/react" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"jid\": \"$jid\", \"messageId\": \"$messageId\", \"emoji\": \"🚀\"}" > /dev/null
+echo "   ✅ Reaction sent."
+sleep 2
+
+echo "   - ✍️  Test: POST /message/edit"
+curl -s -X POST "$MESSAGE_URL/edit" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"jid\": \"$jid\", \"messageId\": \"$messageId\", \"newText\": \"This message has been edited.\"}" > /dev/null
+echo "   ✅ Edit sent."
+sleep 2
+
+echo "   - ⏩ Test: POST /message/forward"
+curl -s -X POST "$MESSAGE_URL/forward" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"to\": \"$jid\", \"message\": $send_resp}" > /dev/null
+echo "   ✅ Forward sent."
+sleep 2
+
+echo "   - 🖼️  Test: POST /message/send (image)"
+curl -s -X POST "$MESSAGE_URL/send" $SESSION_HEADER $CONTENT_HEADER \
+  -d '{"jid": "'"$jid"'", "type": "image", "content": "https://i.imgur.com/LPVsY29.jpeg", "options": {"caption": "Test Image"}}' > /dev/null
+echo "   ✅ Image sent."
+sleep 2
+
+echo "   - 🗑️  Test: POST /message/delete"
+curl -s -X POST "$MESSAGE_URL/delete" $SESSION_HEADER $CONTENT_HEADER \
+  -d "{\"jid\": \"$jid\", \"messageId\": \"$messageId\"}" > /dev/null
+echo "   ✅ Delete command sent."
+echo
+echo "✅ All messaging tests complete."
+echo
+
+echo "🧹 5. Cleaning up session…"
+delete_resp=$(curl -s -X DELETE "$AUTH_URL/remove" $CONTENT_HEADER \
+  -d "{\"sessionId\": \"$sessionId\"}")
+
+success=$(echo "$delete_resp" | jq -r '.success')
+if [[ "$success" == "true" ]]; then
+    echo "✅ Session deleted successfully."
+else
+    echo "❌ Failed to delete session. Response: $delete_resp"
+fi
+
+echo
+echo "🎉 Full test cycle finished!"

@@ -1,5 +1,4 @@
 // @path: client/client.js
-
 import { Boom } from '@hapi/boom'
 import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys'
 import { registerSocketEvents } from '../utils/helpers.js'

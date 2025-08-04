@@ -23,22 +23,20 @@ import { initAuthState } from '../utils/sessionInit.js'
 
 const { makeInMemoryStore, makeCacheableSignalKeyStore } = baileys
 const STORE_PATH = './.sessions/store.json'
-export const store = makeInMemoryStore({})
+export const store = makeInMemoryStore()
 
-let persistenceStarted = false
-const startPersistence = () => {
-  if (persistenceStarted) return
-  persistenceStarted = true
+let started = false
+const persist = () => {
+  if (started) return
+  started = true
   setInterval(() => {
     try {
-      writeFileSync(STORE_PATH,
-        JSON.stringify({
-          chats: [...store.chats.entries()],
-          contacts: store.contacts
-        }, null, 2)
-      )
-    } catch (err) {
-      console.warn('⚠️ Error persistiendo store:', err)
+      writeFileSync(STORE_PATH, JSON.stringify({
+        chats: [...store.chats.entries()],
+        contacts: store.contacts
+      }))
+    } catch (e) {
+      console.warn('⚠️ Error persistiendo store:', e)
     }
   }, 10_000)
 }
@@ -47,16 +45,16 @@ if (existsSync(STORE_PATH)) {
   try {
     const { chats, contacts } = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
     if (Array.isArray(chats)) store.chats = new Map(chats)
-    if (contacts && typeof contacts === 'object') store.contacts = contacts
-  } catch (err) {
-    console.warn('⚠️ Error cargando store:', err)
+    if (contacts) store.contacts = contacts
+  } catch (e) {
+    console.warn('⚠️ Error cargando store:', e)
   }
 }
 
-const originalBind = store.bind.bind(store)
-store.bind = ev => {
-  originalBind(ev)
-  startPersistence()
+const original = store.bind.bind(store)
+store.bind = e => {
+  original(e)
+  persist()
 }
 
 export const initAuthStore = async () => {
@@ -66,7 +64,6 @@ export const initAuthStore = async () => {
   return { authState: state, signalKeyStore }
 }
 // @path: message/message.routes.js
-
 import { Router } from 'express'
 import { checkSession } from '../middlewares/checkSession.js'
 import {
@@ -101,7 +98,6 @@ export const react   = wrapController((body, req) => service.reactToMessage(req.
 export const remove  = wrapController((body, req) => service.deleteMessage(req.sock, body));
 export const edit    = wrapController((body, req) => service.editMessage(req.sock, body));
 // @path: message/message.service.js
-
 const getPayload = (type, content, options) => ({
   text:     { text: content },
   image:    { image: { url: content } },
@@ -157,7 +153,6 @@ export default Router()
   .use('/auth', auth)
   .use('/message', message)
 // @path: auth/auth.service.js
-
 import { initSession, deleteSession, getSession } from '../client/session.manager.js'
 import { randomUUID } from 'crypto'
 import { getPendingQR } from '../utils/helpers.js'
@@ -226,7 +221,6 @@ router.get('/status', checkAuth)
 
 export default router
 // @path: auth/auth.controller.js
-
 import {
   createSession as svcCreate,
   removeSession as svcRemove,
@@ -309,7 +303,6 @@ const logger = pino({
 
 export default logger
 // @path: utils/sessionInit.js
-
 import { useMultiFileAuthState } from '@whiskeysockets/baileys'
 
 export const initAuthState = async sessionPath => {
@@ -376,7 +369,6 @@ export const deleteSession = async id => {
 
 export const getSessions = () => [...sessions.keys()]
 // @path: client/client.js
-
 import { Boom } from '@hapi/boom'
 import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys'
 import { registerSocketEvents } from '../utils/helpers.js'

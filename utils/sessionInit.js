@@ -1,5 +1,4 @@
 // @path: utils/sessionInit.js
-
 import { useMultiFileAuthState } from '@whiskeysockets/baileys'
 
 export const initAuthState = async sessionPath => {

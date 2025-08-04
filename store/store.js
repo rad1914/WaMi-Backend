@@ -6,22 +6,22 @@ import { initAuthState } from '../utils/sessionInit.js'
 
 const { makeInMemoryStore, makeCacheableSignalKeyStore } = baileys
 const STORE_PATH = './.sessions/store.json'
-export const store = makeInMemoryStore({})
+import logger from '../utils/logger.js'
 
-let persistenceStarted = false
-const startPersistence = () => {
-  if (persistenceStarted) return
-  persistenceStarted = true
+export const store = makeInMemoryStore({ logger })
+
+let started = false
+const persist = () => {
+  if (started) return
+  started = true
   setInterval(() => {
     try {
-      writeFileSync(STORE_PATH,
-        JSON.stringify({
-          chats: [...store.chats.entries()],
-          contacts: store.contacts
-        }, null, 2)
-      )
-    } catch (err) {
-      console.warn('⚠️ Error persistiendo store:', err)
+      writeFileSync(STORE_PATH, JSON.stringify({
+        chats: [...store.chats.entries()],
+        contacts: store.contacts
+      }))
+    } catch (e) {
+      console.warn('⚠️ Error persistiendo store:', e)
     }
   }, 10_000)
 }
@@ -30,16 +30,16 @@ if (existsSync(STORE_PATH)) {
   try {
     const { chats, contacts } = JSON.parse(readFileSync(STORE_PATH, 'utf-8'))
     if (Array.isArray(chats)) store.chats = new Map(chats)
-    if (contacts && typeof contacts === 'object') store.contacts = contacts
-  } catch (err) {
-    console.warn('⚠️ Error cargando store:', err)
+    if (contacts) store.contacts = contacts
+  } catch (e) {
+    console.warn('⚠️ Error cargando store:', e)
   }
 }
 
-const originalBind = store.bind.bind(store)
-store.bind = ev => {
-  originalBind(ev)
-  startPersistence()
+const original = store.bind.bind(store)
+store.bind = e => {
+  original(e)
+  persist()
 }
 
 export const initAuthStore = async () => {

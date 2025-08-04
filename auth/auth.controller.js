@@ -1,5 +1,4 @@
 // @path: auth/auth.controller.js
-
 import {
   createSession as svcCreate,
   removeSession as svcRemove,
