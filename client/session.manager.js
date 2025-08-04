@@ -20,9 +20,7 @@ export const getSession = id => {
 }
 
 export const initSession = async id => {
-  if (sessions.has(id)) {
-    return sessions.get(id)
-  }
+  if (sessions.has(id)) return sessions.get(id)
 
   try {
     const { state, saveCreds } = await initAuthState(path.resolve('.sessions', id))
@@ -31,14 +29,13 @@ export const initSession = async id => {
     const sock = makeWASocket({
       version,
       auth: state,
-      browser: Browsers.macOS('MultiBaileys')
+      browser: Browsers.macOS('MultiBaileys'),
+      shouldSyncHistoryMessage: false,
+      printQRInTerminal: false,
     })
 
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    registerSocketEvents(sock, id, saveCreds, initSession)
-
     sessions.set(id, sock)
-    return sock
+    return { sock, saveCreds }
   } catch (err) {
     console.error(`❌ Error initializing session '${id}':`, err)
     throw new Error(`Failed to initialize session: ${err.message}`)

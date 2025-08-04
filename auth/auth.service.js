@@ -2,6 +2,7 @@
 
 import { initSession, deleteSession, getSession } from '../client/session.manager.js'
 import { randomUUID } from 'crypto'
+import { getPendingQR } from '../utils/helpers.js'
 
 export const createSession = async () => {
   const sessionId = randomUUID()
@@ -17,10 +18,16 @@ export const removeSession = async ({ sessionId }) => {
 
 export const getQRCode = async ({ sessionId }) => {
   if (!sessionId) throw new Error('sessionId is required')
+
   const client = await initSession(sessionId)
 
   if (client?.user?.id) {
     return { success: true }
+  }
+
+  const cached = getPendingQR(sessionId)
+  if (cached) {
+    return { qr: cached }
   }
 
   return new Promise((resolve, reject) => {

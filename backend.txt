@@ -1,20 +1,16 @@
 // @path: middlewares/checkSession.js
 
+import { getSession } from '../client/session.manager.js'
+
 export function checkSession(req, res, next) {
   const sessionId = req.headers['x-session-id']
-
   if (!sessionId) {
     return res.status(400).json({ error: 'sessionId is required' })
   }
 
   try {
-
-    import('../client/session.manager.js').then(({ getSession }) => {
-      getSession(sessionId)
-      next()
-    }).catch(err => {
-      return res.status(401).json({ error: 'Invalid sessionId' })
-    })
+    getSession(sessionId)
+    next()
   } catch (err) {
     return res.status(401).json({ error: 'Invalid sessionId' })
   }
@@ -173,6 +169,7 @@ export default Router()
   .use('/auth', auth)
   .use('/message', message)
 // @path: auth/auth.service.js
+
 import { initSession, deleteSession, getSession } from '../client/session.manager.js'
 import { randomUUID } from 'crypto'
 
@@ -192,8 +189,12 @@ export const getQRCode = async ({ sessionId }) => {
   if (!sessionId) throw new Error('sessionId is required')
   const client = await initSession(sessionId)
 
+  if (client?.user?.id) {
+    return { success: true }
+  }
+
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
+    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20_000)
 
     const handler = update => {
       if (update.qr || update.connection === 'open') {
