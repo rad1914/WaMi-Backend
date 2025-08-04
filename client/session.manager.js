@@ -1,5 +1,4 @@
 // @path: client/session.manager.js
-
 import path from 'path'
 import fs from 'fs'
 import {
@@ -35,6 +34,7 @@ export const initSession = async id => {
       browser: Browsers.macOS('MultiBaileys')
     })
 
+    await new Promise(resolve => setTimeout(resolve, 1500))
     registerSocketEvents(sock, id, saveCreds, initSession)
 
     sessions.set(id, sock)
@@ -56,6 +56,7 @@ export const deleteSession = async id => {
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+
 }
 
 export const getSessions = () => [...sessions.keys()]

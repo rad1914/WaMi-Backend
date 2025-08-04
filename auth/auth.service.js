@@ -1,8 +1,7 @@
 // @path: auth/auth.service.js
+
 import { initSession, deleteSession, getSession } from '../client/session.manager.js'
 import { randomUUID } from 'crypto'
-
-let pairingCode = null
 
 export const createSession = async () => {
   const sessionId = randomUUID()
@@ -20,19 +19,21 @@ export const getQRCode = async ({ sessionId }) => {
   if (!sessionId) throw new Error('sessionId is required')
   const client = await initSession(sessionId)
 
+  if (client?.user?.id) {
+    return { success: true }
+  }
+
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
+    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20_000)
+
     const handler = update => {
-      if (update.qr) {
+      if (update.qr || update.connection === 'open') {
         clearTimeout(timeout)
         client.ev.off('connection.update', handler)
-        resolve({ qr: update.qr })
-      } else if (update.connection === 'open') {
-        clearTimeout(timeout)
-        client.ev.off('connection.update', handler)
-        resolve({ success: true })
+        resolve(update.qr ? { qr: update.qr } : { success: true })
       }
     }
+
     client.ev.on('connection.update', handler)
   })
 }

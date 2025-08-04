@@ -176,8 +176,6 @@ export default Router()
 import { initSession, deleteSession, getSession } from '../client/session.manager.js'
 import { randomUUID } from 'crypto'
 
-let pairingCode = null
-
 export const createSession = async () => {
   const sessionId = randomUUID()
   await initSession(sessionId)
@@ -196,17 +194,15 @@ export const getQRCode = async ({ sessionId }) => {
 
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000)
+
     const handler = update => {
-      if (update.qr) {
+      if (update.qr || update.connection === 'open') {
         clearTimeout(timeout)
         client.ev.off('connection.update', handler)
-        resolve({ qr: update.qr })
-      } else if (update.connection === 'open') {
-        clearTimeout(timeout)
-        client.ev.off('connection.update', handler)
-        resolve({ success: true })
+        resolve(update.qr ? { qr: update.qr } : { success: true })
       }
     }
+
     client.ev.on('connection.update', handler)
   })
 }
@@ -337,7 +333,6 @@ export const initAuthState = async sessionPath => {
   return { state, saveCreds }
 }
 // @path: client/session.manager.js
-
 import path from 'path'
 import fs from 'fs'
 import {
@@ -373,6 +368,7 @@ export const initSession = async id => {
       browser: Browsers.macOS('MultiBaileys')
     })
 
+    await new Promise(resolve => setTimeout(resolve, 1500))
     registerSocketEvents(sock, id, saveCreds, initSession)
 
     sessions.set(id, sock)
@@ -394,6 +390,7 @@ export const deleteSession = async id => {
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+
 }
 
 export const getSessions = () => [...sessions.keys()]
