@@ -1,11 +1,10 @@
 // @path: utils/controller.js
-export function wrapController(fn, opts = {}) {
 
-  const extractor = opts.input === 'query'
-    ? req => req.query
-    : opts.input === 'body'
-    ? req => req.body
-    : opts.input instanceof Function
+export function wrapController(fn, opts = {}) {
+  const extractor =
+    opts.input === 'query'   ? req => req.query
+  : opts.input === 'body'    ? req => req.body
+  : typeof opts.input === 'function'
     ? opts.input
     : req => (req.method === 'GET' ? req.query : req.body);
 
@@ -15,11 +14,12 @@ export function wrapController(fn, opts = {}) {
       const result = await fn(input, req);
       res.json(result);
     } catch (err) {
-      const payload = { error: err.message };
-      if (process.env.NODE_ENV === 'development') {
-        payload.stack = err.stack;
-      }
-      res.status(500).json(payload);
+      res
+        .status(err.status || 500)
+        .json({
+          error: err.message,
+          ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+        });
     }
   };
 }

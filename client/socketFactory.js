@@ -5,10 +5,9 @@ import {
   Browsers
 } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
-import { store } from '../store/store.js'; 
+import { store } from '../store/store.js';
 
 let cachedVersion = null;
-
 async function getBaileysVersion() {
   if (!cachedVersion) {
     const { version } = await fetchLatestBaileysVersion();
@@ -18,19 +17,15 @@ async function getBaileysVersion() {
 }
 
 export async function createSocket({ authState, sessionId, browserName, reinit }) {
-  const version = await getBaileysVersion();
-
   const sock = makeWASocket({
-    version,
-    auth: authState,                      
+    version: await getBaileysVersion(),
+    auth: authState,
     browser: Browsers.macOS(browserName),
-    shouldSyncHistoryMessage: true,       
+    shouldSyncHistoryMessage: true,
     printQRInTerminal: false
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-
-  store.bind(sock.ev);
-
+  store.bind(sock.ev);     
   return sock;
 }

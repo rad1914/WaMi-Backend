@@ -1,7 +1,7 @@
 // @path: client/session.manager.js
 import path from 'path';
 import fs from 'fs';
-import { initAuthState } from '../utils/sessionInit.js';
+import { initAuthState } from '../utils/session.js';
 import { createSocket } from './socketFactory.js';
 
 const sessions = new Map();

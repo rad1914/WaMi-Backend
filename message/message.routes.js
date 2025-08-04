@@ -1,24 +1,13 @@
 // @path: message/message.routes.js
-import { Router } from 'express'
-import { checkSession } from '../middlewares/checkSession.js'
-import {
-  send,
-  reply,
-  forward,
-  react,
-  remove,
-  edit
-} from './message.controller.js'
+import { Router } from 'express';
+import { checkSession } from '../middlewares/checkSession.js';
+import { controllers } from './message.controller.js';
 
-const router = Router()
+const router = Router();
+router.use(checkSession);
 
-router.use(checkSession)
+Object.keys(controllers).forEach(action =>
+  router.post(`/${action}`, controllers[action])
+);
 
-router.post('/send', send)
-router.post('/reply', reply)
-router.post('/forward', forward)
-router.post('/react', react)
-router.post('/delete', remove)
-router.post('/edit', edit)
-
-export default router
+export default router;

@@ -1,33 +1,28 @@
 // @path: middlewares/checkSession.js
-import { getValidatedSessionId, safeGetSession } from '../utils/sessionUtil.js';
+import { extractSock } from '../utils/session.js';
 
 export function checkSession(req, res, next) {
-  let sessionId;
   try {
-    sessionId = getValidatedSessionId(req);
-    req.sock = safeGetSession(sessionId);
-    return next();
+    req.sock = extractSock(req);
+    next();
   } catch (err) {
-    const status = err.message === 'sessionId is required' ? 400 : 401;
-    return res.status(status).json({ error: err.message });
+    res
+      .status(err.status || 500)
+      .json({ error: err.message });
   }
 }
 // @path: store/store.js
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import baileys from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
-import { initAuthState } from '../utils/sessionInit.js';
+import { initAuthState } from '../utils/session.js';
 import logger from '../utils/logger.js';
 
 const { makeInMemoryStore, makeCacheableSignalKeyStore } = baileys;
 const STORE_PATH = './.sessions/store.json';
+
 export const store = makeInMemoryStore({ logger });
-
-store.bind = ev => {
-  ev.on('creds.update', () => persist());
-};
-
-function persist() {
+store.ev.on('creds.update', () => {
   try {
     writeFileSync(
       STORE_PATH,
@@ -39,13 +34,11 @@ function persist() {
   } catch (e) {
     console.warn('⚠️ Error persisting store:', e);
   }
-}
+});
 
 if (existsSync(STORE_PATH)) {
   try {
-    const { chats, contacts } = JSON.parse(
-      readFileSync(STORE_PATH, 'utf-8')
-    );
+    const { chats, contacts } = JSON.parse(readFileSync(STORE_PATH, 'utf-8'));
     if (Array.isArray(chats)) store.chats = new Map(chats);
     if (contacts) store.contacts = contacts;
   } catch (e) {
@@ -63,51 +56,38 @@ export async function initAuthStore() {
   return { authState: state, signalKeyStore };
 }
 // @path: message/message.routes.js
-import { Router } from 'express'
-import { checkSession } from '../middlewares/checkSession.js'
-import {
-  send,
-  reply,
-  forward,
-  react,
-  remove,
-  edit
-} from './message.controller.js'
+import { Router } from 'express';
+import { checkSession } from '../middlewares/checkSession.js';
+import { controllers } from './message.controller.js';
 
-const router = Router()
+const router = Router();
+router.use(checkSession);
 
-router.use(checkSession)
+Object.keys(controllers).forEach(action =>
+  router.post(`/${action}`, controllers[action])
+);
 
-router.post('/send', send)
-router.post('/reply', reply)
-router.post('/forward', forward)
-router.post('/react', react)
-router.post('/delete', remove)
-router.post('/edit', edit)
-
-export default router
+export default router;
 // @path: message/message.controller.js
 import * as svc from './message.service.js';
 import { wrapController } from '../utils/controller.js';
 
-export const send = wrapController((body, req) =>
-  svc.sendMessage(req.sock, body)
-);
-export const reply = wrapController((body, req) =>
-  svc.replyToMessage(req.sock, body)
-);
-export const forward = wrapController((body, req) =>
-  svc.forwardMessage(req.sock, body)
-);
-export const react = wrapController((body, req) =>
-  svc.reactToMessage(req.sock, body)
-);
-export const remove = wrapController((body, req) =>
-  svc.deleteMessage(req.sock, body)
-);
-export const edit = wrapController((body, req) =>
-  svc.editMessage(req.sock, body)
-);
+const mapping = {
+  send:    'sendMessage',
+  reply:   'replyToMessage',
+  forward: 'forwardMessage',
+  react:   'reactToMessage',
+  delete:  'deleteMessage',
+  edit:    'editMessage'
+};
+
+export const controllers = Object.entries(mapping)
+  .reduce((out, [route, svcFn]) => {
+    out[route] = wrapController((body, req) =>
+      svc[svcFn](req.sock, body)
+    );
+    return out;
+  }, {});
 // @path: message/message.service.js
 const getPayload = (type, content, options) => ({
   text:     { text: content },
@@ -158,16 +138,14 @@ export const editMessage = async (sock, { jid, messageId, newText }) => {
 // @path: routes.js
 import { Router } from 'express';
 import authRoutes from './auth/auth.routes.js';
-import msgRoutes from './message/message.routes.js';
+import msgRoutes  from './message/message.routes.js';
 
 export default Router()
-  .use('/auth', authRoutes)
+  .use('/auth',    authRoutes)
   .use('/message', msgRoutes);
 // @path: auth/auth.service.js
 import { initSession, deleteSession, getSession } from '../client/session.manager.js';
 import { randomUUID } from 'crypto';
-import { getPendingQR } from '../utils/helpers.js';
-import { requireSessionId } from '../utils/errorGuards.js';
 
 export async function createSession() {
   const sessionId = randomUUID();
@@ -176,52 +154,41 @@ export async function createSession() {
 }
 
 export async function removeSession({ sessionId }) {
-  requireSessionId(sessionId);
+  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
   await deleteSession(sessionId);
   return { success: true };
 }
 
 export async function getQRCode({ sessionId }) {
-  requireSessionId(sessionId);
-  const client = await initSession(sessionId);
-  if (client.sock.user?.id) return { success: true };
-  const cached = getPendingQR(sessionId);
-  if (cached) return { qr: cached };
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('QR timeout')), 20000);
-    const handler = update => {
-      if (update.qr || update.connection === 'open') {
-        clearTimeout(timeout);
-        client.sock.ev.off('connection.update', handler);
-        resolve(update.qr ? { qr: update.qr } : { success: true });
-      }
-    };
-    client.sock.ev.on('connection.update', handler);
-  });
+  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+
+  const sock = await initSession(sessionId);
+  const qr = sock.ev.pendingQR;
+  if (sock.user?.id) return { success: true };
+  if (qr) return { qr };
+  throw Object.assign(new Error('QR not yet available'), { status: 404 });
 }
 
 export function checkAuth({ sessionId }) {
-  requireSessionId(sessionId);
+  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
   const client = getSession(sessionId);
   return { authenticated: !!client.user?.id };
 }
 // @path: auth/auth.routes.js
 import { Router } from 'express';
-import {
-  createSession,
-  removeSession,
-  getQRCode,
-  checkAuth,
-  reload
-} from './auth.controller.js';
+import * as ctrl from './auth.controller.js';
 
 const router = Router();
 
-router.post('/create', createSession);
-router.delete('/remove', removeSession);
-router.get('/qr', getQRCode);
-router.get('/status', checkAuth);
-router.post('/reload', reload);
+[
+  ['post',   '/create', ctrl.createSession],
+  ['delete', '/remove', ctrl.removeSession],
+  ['get',    '/qr',     ctrl.getQRCode],
+  ['get',    '/status', ctrl.checkAuth],
+  ['post',   '/reload', ctrl.reload]
+].forEach(([method, path, handler]) =>
+  router[method](path, handler)
+);
 
 export default router;
 // @path: auth/auth.controller.js
@@ -320,13 +287,12 @@ export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
   });
 };
 // @path: utils/controller.js
-export function wrapController(fn, opts = {}) {
 
-  const extractor = opts.input === 'query'
-    ? req => req.query
-    : opts.input === 'body'
-    ? req => req.body
-    : opts.input instanceof Function
+export function wrapController(fn, opts = {}) {
+  const extractor =
+    opts.input === 'query'   ? req => req.query
+  : opts.input === 'body'    ? req => req.body
+  : typeof opts.input === 'function'
     ? opts.input
     : req => (req.method === 'GET' ? req.query : req.body);
 
@@ -336,11 +302,12 @@ export function wrapController(fn, opts = {}) {
       const result = await fn(input, req);
       res.json(result);
     } catch (err) {
-      const payload = { error: err.message };
-      if (process.env.NODE_ENV === 'development') {
-        payload.stack = err.stack;
-      }
-      res.status(500).json(payload);
+      res
+        .status(err.status || 500)
+        .json({
+          error: err.message,
+          ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+        });
     }
   };
 }
@@ -364,12 +331,43 @@ const logger = pino({
 })
 
 export default logger
-// @path: utils/sessionUtil.js
-import { requireSessionId } from './errorGuards.js';
+// @path: utils/errorGuards.js
+export function requireSessionId(sessionId) {
+  if (!sessionId) throw new Error('sessionId is required');
+  return sessionId;
+}
+// @path: utils/session.js (merged)
+import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { getSession as _getSession } from '../client/session.manager.js';
+import { requireSessionId } from './errorGuards.js';
+
+export function extractSock(req) {
+  const sessionId =
+    req.headers['x-session-id'] ||
+    req.body?.sessionId ||
+    req.query?.sessionId;
+
+  if (!sessionId) {
+    const err = new Error('sessionId is required');
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    return _getSession(sessionId);
+  } catch {
+    const err = new Error('Invalid sessionId');
+    err.status = 401;
+    throw err;
+  }
+}
+
+export const initAuthState = async (sessionPath) => {
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  return { state, saveCreds };
+};
 
 export function getValidatedSessionId(req) {
-
   const sessionId =
     req.headers['x-session-id'] ||
     req.body?.sessionId ||
@@ -384,18 +382,6 @@ export function safeGetSession(sessionId) {
     throw new Error('Invalid sessionId');
   }
 }
-// @path: utils/errorGuards.js
-export function requireSessionId(sessionId) {
-  if (!sessionId) throw new Error('sessionId is required');
-  return sessionId;
-}
-// @path: utils/sessionInit.js
-import { useMultiFileAuthState } from '@whiskeysockets/baileys'
-
-export const initAuthState = async sessionPath => {
-  const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
-  return { state, saveCreds }
-}
 // @path: client/socketFactory.js
 import {
   makeWASocket,
@@ -403,10 +389,9 @@ import {
   Browsers
 } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
-import { store } from '../store/store.js'; 
+import { store } from '../store/store.js';
 
 let cachedVersion = null;
-
 async function getBaileysVersion() {
   if (!cachedVersion) {
     const { version } = await fetchLatestBaileysVersion();
@@ -416,26 +401,22 @@ async function getBaileysVersion() {
 }
 
 export async function createSocket({ authState, sessionId, browserName, reinit }) {
-  const version = await getBaileysVersion();
-
   const sock = makeWASocket({
-    version,
-    auth: authState,                      
+    version: await getBaileysVersion(),
+    auth: authState,
     browser: Browsers.macOS(browserName),
-    shouldSyncHistoryMessage: true,       
+    shouldSyncHistoryMessage: true,
     printQRInTerminal: false
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-
-  store.bind(sock.ev);
-
+  store.bind(sock.ev);     
   return sock;
 }
 // @path: client/session.manager.js
 import path from 'path';
 import fs from 'fs';
-import { initAuthState } from '../utils/sessionInit.js';
+import { initAuthState } from '../utils/session.js';
 import { createSocket } from './socketFactory.js';
 
 const sessions = new Map();
@@ -479,7 +460,7 @@ export function getSessions() {
 
 import fs from 'fs';
 import path from 'path';
-import { initAuthState } from '../utils/sessionInit.js';
+import { initAuthState } from '../utils/session.js';
 import { createSocket } from './socketFactory.js';
 import { store } from '../store/store.js';
 import logger from '../utils/logger.js';
