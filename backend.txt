@@ -36,7 +36,7 @@ Object.keys(controllers).forEach(action =>
 export default router;
 // @path: message/message.controller.js
 import * as svc from './message.service.js';
-import { wrapController } from '../utils/controller.js';
+import { wrapController } from '../utils/utils.js';
 
 const mapping = {
   send:    'sendMessage',
@@ -90,10 +90,12 @@ export const editMessage = (sock, { jid, messageId, newText }) =>
 import { Router } from 'express';
 import authRoutes from './auth/auth.routes.js';
 import msgRoutes  from './message/message.routes.js';
+import chatRoutes from './chats/chats.routes.js';
 
 export default Router()
   .use('/auth',    authRoutes)
-  .use('/message', msgRoutes);
+  .use('/message', msgRoutes)
+  .use('/chats',   chatRoutes);
 // @path: auth/auth.service.js
 import { initSession, deleteSession, getSession } from '../client/session.manager.js';
 import { getPendingQR } from '../utils/helpers.js';
@@ -156,7 +158,7 @@ const router = Router();
 export default router;
 // @path: auth/auth.controller.js
 import * as service from './auth.service.js';
-import { wrapController } from '../utils/controller.js';
+import { wrapController } from '../utils/utils.js';
 
 export const createSession = wrapController(async () => service.createSession());
 export const removeSession = wrapController(async body =>
@@ -178,12 +180,20 @@ export const reload = wrapController(
   { input: 'body' }
 );
 // @path: index.js
+import fs from 'fs';
+import path from 'path';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import routes from './routes.js';
 import { initClient } from './client/client.js';
+import { SESSION_BASE_DIR } from './config/config.js';
+
+if (!fs.existsSync(SESSION_BASE_DIR)) {
+  fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+  console.log(`📂 Created sessions directory at ${SESSION_BASE_DIR}`);
+}
 
 dotenv.config();
 
@@ -242,31 +252,6 @@ export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
     }
   });
 };
-// @path: utils/controller.js
-
-export function wrapController(fn, opts = {}) {
-  const extractor =
-    opts.input === 'query'   ? req => req.query
-  : opts.input === 'body'    ? req => req.body
-  : typeof opts.input === 'function'
-    ? opts.input
-    : req => (req.method === 'GET' ? req.query : req.body);
-
-  return async (req, res) => {
-    try {
-      const input = extractor(req);
-      const result = await fn(input, req);
-      res.json(result);
-    } catch (err) {
-      res
-        .status(err.status || 500)
-        .json({
-          error: err.message,
-          ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
-        });
-    }
-  };
-}
 // @path: utils/logger.js
 import pino from 'pino'
 
@@ -313,11 +298,6 @@ export function saveStore(store) {
     console.warn('⚠️ Error persisting store:', e);
   }
 }
-// @path: utils/errorGuards.js
-export function requireSessionId(sessionId) {
-  if (!sessionId) throw new Error('sessionId is required');
-  return sessionId;
-}
 // @path: utils/session.js
 import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
@@ -345,6 +325,38 @@ export function extractSock(req) {
 export async function initAuthState(subDir = 'auth') {
   const dir = path.resolve(SESSION_BASE_DIR, subDir);
   return useMultiFileAuthState(dir);
+}
+// @path: utils/utils.js
+// @path: utils/controller.js
+
+export function wrapController(fn, opts = {}) {
+  const extractor =
+    opts.input === 'query'   ? req => req.query
+  : opts.input === 'body'    ? req => req.body
+  : typeof opts.input === 'function'
+    ? opts.input
+    : req => (req.method === 'GET' ? req.query : req.body);
+
+  return async (req, res) => {
+    try {
+      const input = extractor(req);
+      const result = await fn(input, req);
+      res.json(result);
+    } catch (err) {
+      res
+        .status(err.status || 500)
+        .json({
+          error: err.message,
+          ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+        });
+    }
+  };
+}
+
+// @path: utils/errorGuards.js
+export function requireSessionId(sessionId) {
+  if (!sessionId) throw new Error('sessionId is required');
+  return sessionId;
 }
 // @path: client/socketFactory.js
 import {
@@ -422,21 +434,26 @@ export async function deleteSession(id) {
   });
 }
 // @path: client/client.js
+import fs from 'fs';
+import path from 'path';
 import logger from '../utils/logger.js';
 import { store } from '../store/store.js';
 import { saveStore } from '../utils/store.js';
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
+import { initSession } from './session.manager.js';
+import { SESSION_BASE_DIR } from '../config/config.js';
 
 let sharedClient = null;
 
 export async function initClient() {
+
   const { state, saveCreds } = await initAuthState('auth');
   const sock = await createSocket({
-    authState:  { ...state, saveCreds },
-    sessionId:  'shared',
-    browserName:'BaileysAPI',
-    reinit:     initClient
+    authState: { ...state, saveCreds },
+    sessionId: 'shared',
+    browserName: 'BaileysAPI',
+    reinit: initClient
   });
 
   store.bind(sock.ev);
@@ -446,6 +463,24 @@ export async function initClient() {
   });
 
   sharedClient = sock;
+
+  try {
+    const entries = fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true });
+    const sessionDirs = entries
+      .filter(entry => entry.isDirectory() && entry.name !== 'auth')
+      .map(entry => entry.name);
+
+    for (const sessionId of sessionDirs) {
+      try {
+        await initSession(sessionId);
+        logger.info(`✅ [${sessionId}] session restored`);
+      } catch (err) {
+        logger.warn(`⚠️ Failed to restore session '${sessionId}':`, err.message);
+      }
+    }
+  } catch (err) {
+    logger.error('❌ Failed to scan session directories:', err.message);
+  }
 }
 
 export function getClient() {
@@ -454,6 +489,55 @@ export function getClient() {
 }
 // @path: config/config.js
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-export const SESSION_BASE_DIR = path.resolve('.sessions');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+export const SESSION_BASE_DIR = path.join(ROOT_DIR, '.sessions');
 export const STORE_FILE        = path.join(SESSION_BASE_DIR, 'store.json');
+// @path: chats/chats.routes.js
+import { Router } from 'express';
+import { checkSession } from '../middlewares/checkSession.js';
+import * as ctrl from './chats.controller.js';
+
+const router = Router();
+router.use(checkSession);
+
+router.get('/', ctrl.getAllChats);
+router.get('/pinned', ctrl.getPinnedChats);
+router.get('/:jid', ctrl.getChatByJid);
+
+export default router;
+// @path: chats/chats.controller.js
+import * as svc from './chats.service.js';
+import { wrapController } from '../utils/utils.js';
+
+export const getAllChats = wrapController((_, req) =>
+  svc.getAllChats(req.sock)
+);
+
+export const getPinnedChats = wrapController((_, req) =>
+  svc.getPinnedChats(req.sock)
+);
+
+export const getChatByJid = wrapController((_, req) =>
+  svc.getChatByJid(req.sock, req.params.jid)
+);
+// @path: chats/chats.service.js
+export function getAllChats(sock) {
+  const chats = sock.store?.chats || new Map();
+  return Array.from(chats.values());
+}
+
+export function getPinnedChats(sock) {
+  const chats = sock.store?.chats || new Map();
+  return Array.from(chats.values()).filter(chat => chat.pinned);
+}
+
+export function getChatByJid(sock, jid) {
+  const chat = sock.store?.chats?.get(jid);
+  if (!chat) throw Object.assign(new Error('Chat not found'), { status: 404 });
+  return chat;
+}

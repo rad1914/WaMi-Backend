@@ -2,7 +2,7 @@
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
 import { store } from '../store/store.js';
-import { saveStore } from '../utils/store.js';
+import { saveStore } from '../store/store.js';
 
 const sessions = new Map();
 

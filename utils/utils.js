@@ -1,3 +1,4 @@
+// @path: utils/utils.js
 // @path: utils/controller.js
 
 export function wrapController(fn, opts = {}) {
@@ -22,4 +23,10 @@ export function wrapController(fn, opts = {}) {
         });
     }
   };
+}
+
+// @path: utils/errorGuards.js
+export function requireSessionId(sessionId) {
+  if (!sessionId) throw new Error('sessionId is required');
+  return sessionId;
 }

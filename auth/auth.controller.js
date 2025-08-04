@@ -1,6 +1,6 @@
 // @path: auth/auth.controller.js
 import * as service from './auth.service.js';
-import { wrapController } from '../utils/controller.js';
+import { wrapController } from '../utils/utils.js';
 
 export const createSession = wrapController(async () => service.createSession());
 export const removeSession = wrapController(async body =>

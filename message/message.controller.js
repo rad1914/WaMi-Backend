@@ -1,6 +1,6 @@
 // @path: message/message.controller.js
 import * as svc from './message.service.js';
-import { wrapController } from '../utils/controller.js';
+import { wrapController } from '../utils/utils.js';
 
 const mapping = {
   send:    'sendMessage',
