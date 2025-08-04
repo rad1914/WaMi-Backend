@@ -1,18 +1,18 @@
 // @path: middlewares/checkSession.js
-
-import { getSession } from '../client/session.manager.js'
+import { getSession } from '../client/session.manager.js';
 
 export function checkSession(req, res, next) {
-  const sessionId = req.headers['x-session-id']
+  const sessionId = req.headers['x-session-id'];
   if (!sessionId) {
-    return res.status(400).json({ error: 'sessionId is required' })
+    return res.status(400).json({ error: 'sessionId is required' });
   }
 
   try {
-    getSession(sessionId)
-    next()
+
+    req.sock = getSession(sessionId);
+    next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid sessionId' })
+    return res.status(401).json({ error: 'Invalid sessionId' });
   }
 }
 // @path: store/store.js
@@ -91,75 +91,63 @@ router.post('/edit', edit)
 
 export default router
 // @path: message/message.controller.js
+import * as service from './message.service.js';
+import { wrapController } from '../utils/helpers.js';
 
-import * as service from './message.service.js'
-import { wrapController } from '../utils/helpers.js'
-
-export const send    = wrapController(body => service.sendMessage(body))
-export const reply   = wrapController(body => service.replyToMessage(body))
-export const forward = wrapController(body => service.forwardMessage(body))
-export const react   = wrapController(body => service.reactToMessage(body))
-export const remove  = wrapController(body => service.deleteMessage(body))
-export const edit    = wrapController(body => service.editMessage(body))
+export const send    = wrapController((body, req) => service.sendMessage(req.sock, body));
+export const reply   = wrapController((body, req) => service.replyToMessage(req.sock, body));
+export const forward = wrapController((body, req) => service.forwardMessage(req.sock, body));
+export const react   = wrapController((body, req) => service.reactToMessage(req.sock, body));
+export const remove  = wrapController((body, req) => service.deleteMessage(req.sock, body));
+export const edit    = wrapController((body, req) => service.editMessage(req.sock, body));
 // @path: message/message.service.js
-import { getSession } from '../client/session.manager.js'
 
-const getPayload = (type, content, options) => {
-  const payloads = {
-    text:     { text: content },
-    image:    { image: { url: content } },
-    video:    { video: { url: content } },
-    audio:    { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
-    document: { document: { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' } },
-    sticker:  { sticker: { url: content } },
-    react:    { react: content },
-    delete:   { delete: content },
-    edit:     { edit: content }
-  }
-  return payloads[type]
-}
+const getPayload = (type, content, options) => ({
+  text:     { text: content },
+  image:    { image: { url: content } },
+  video:    { video: { url: content } },
+  audio:    { audio: { url: content, mimetype: 'audio/ogg; codecs=opus' } },
+  document: { document: { url: content, mimetype: 'application/pdf', fileName: options?.fileName || 'file.pdf' } },
+  sticker:  { sticker: { url: content } },
+  react:    { react: content },
+  delete:   { delete: content },
+  edit:     { edit: content }
+}[type]);
 
-export const sendMessage = async ({ sessionId, jid, type, content, options }) => {
-  const sock = getSession(sessionId)
-  const payload = getPayload(type, content, options)
-  return await sock.sendMessage(jid, payload, options)
-}
+export const sendMessage = async (sock, { jid, type, content, options }) => {
+  const payload = getPayload(type, content, options);
+  return sock.sendMessage(jid, payload, options);
+};
 
-export const replyToMessage = async ({ sessionId, jid, content, quotedMessageId, type = 'text' }) => {
-  const sock = getSession(sessionId)
-  const quoted = await findMessage(sessionId, jid, quotedMessageId)
-  const payload = getPayload(type, content)
-  return await sock.sendMessage(jid, payload, { quoted })
-}
+export const replyToMessage = async (sock, { jid, content, quotedMessageId, type = 'text' }) => {
 
-export const forwardMessage = async ({ sessionId, to, message }) => {
-  const sock = getSession(sessionId)
-  return await sock.relayMessage(to, message, { messageId: message.key?.id })
-}
+  const messages = await sock.store?.loadMessages(jid, 50);
+  const quoted = messages?.messages.find(m => m.key?.id === quotedMessageId);
+  const payload = getPayload(type, content);
+  return sock.sendMessage(jid, payload, { quoted });
+};
 
-export const reactToMessage = async ({ sessionId, jid, messageId, emoji }) => {
-  const sock = getSession(sessionId)
-  const content = { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } }
-  return await sock.sendMessage(jid, { react: content })
-}
+export const forwardMessage = async (sock, { to, message }) => {
+  return sock.relayMessage(to, message, { messageId: message.key?.id });
+};
 
-export const deleteMessage = async ({ sessionId, jid, messageId, fromMe = true }) => {
-  const sock = getSession(sessionId)
-  return await sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe, id: messageId } })
-}
+export const reactToMessage = async (sock, { jid, messageId, emoji }) => {
+  const content = { text: emoji, key: { remoteJid: jid, id: messageId, fromMe: false } };
+  return sock.sendMessage(jid, { react: content });
+};
 
-export const editMessage = async ({ sessionId, jid, messageId, newText }) => {
-  const sock = getSession(sessionId)
-  return await sock.sendMessage(jid, {
-    edit: { message: { conversation: newText }, key: { remoteJid: jid, fromMe: true, id: messageId } }
-  })
-}
+export const deleteMessage = async (sock, { jid, messageId, fromMe = true }) => {
+  return sock.sendMessage(jid, { delete: { remoteJid: jid, fromMe, id: messageId } });
+};
 
-const findMessage = async (sessionId, jid, msgId) => {
-  const sock = getSession(sessionId)
-  const messages = await sock.store?.loadMessages(jid, 50)
-  return messages?.messages?.find(m => m.key?.id === msgId)
-}
+export const editMessage = async (sock, { jid, messageId, newText }) => {
+  return sock.sendMessage(jid, {
+    edit: {
+      message: { conversation: newText },
+      key: { remoteJid: jid, fromMe: true, id: messageId }
+    }
+  });
+};
 // @path: routes.js
 import { Router } from 'express'
 import auth from './auth/auth.routes.js'
@@ -275,53 +263,31 @@ app.listen(PORT, async () => {
   await initClient()
 })
 // @path: utils/helpers.js
+import { Boom } from '@hapi/boom';
+import { DisconnectReason } from '@whiskeysockets/baileys';
+import logger from './logger.js';
 
-import { Boom } from '@hapi/boom'
-import { DisconnectReason } from '@whiskeysockets/baileys'
-import logger from './logger.js'
+const pendingQRs = new Map();
 
-const pendingQRs = new Map()
-
-export const getPendingQR = sessionId => pendingQRs.get(sessionId) || null
+export const getPendingQR = sessionId => pendingQRs.get(sessionId) || null;
 
 export const registerSocketEvents = (sock, sessionId, saveCreds, reinitFn) => {
-  sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      console.log(`[${sessionId}] QR: ${qr}`)
-
-      pendingQRs.set(sessionId, qr)
-
-      setTimeout(() => pendingQRs.delete(sessionId), 30_000)
-    }
-
-    if (connection === 'close') {
-      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      logger[code === DisconnectReason.loggedOut ? 'error' : 'warn'](
-        `[${sessionId}] Disconnected (${code})`
-      )
-      if (code !== DisconnectReason.loggedOut) reinitFn(sessionId)
-    }
-
-    if (connection === 'open') {
-      logger.info(`[${sessionId}] Connected`)
-    }
-  })
-}
+};
 
 export const wrapController = fn => async (req, res) => {
   try {
-    const input = req.method === 'GET' ? req.query : req.body
-    res.json(await fn(input))
+    const input = req.method === 'GET' ? req.query : req.body;
+
+    res.json(await fn(input, req));
   } catch (err) {
-    const payload = { error: err.message }
+    const payload = { error: err.message };
     if (process.env.NODE_ENV === 'development') {
-      payload.stack = err.stack
+      payload.stack = err.stack;
     }
-    res.status(500).json(payload)
+    res.status(500).json(payload);
   }
-}
+};
 // @path: utils/logger.js
 import pino from 'pino'
 
