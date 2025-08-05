@@ -26,7 +26,7 @@ call_endpoint() {
 }
 
 echo "🔧 1. Using static session ID…"
-sessionId="fa53d0a0-db23-41a0-a5f4-22f43c5fb540"
+sessionId="07677b8b-e22b-43ac-8308-1fc0692b8987"
 echo
 
 echo "⏳ 2. Initializing session on server…"

@@ -23,4 +23,3 @@ export function wrapController(fn, opts = {}) {
     }
   };
 }
-
