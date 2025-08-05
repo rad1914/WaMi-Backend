@@ -46,5 +46,15 @@ export function saveStore(store) {
 export const store = makeInMemoryStore({ logger });
 
 const { chats, contacts } = loadStore();
-if (Array.isArray(chats)) store.chats = new Map(chats);
-if (contacts)       store.contacts = contacts;
+
+if (Array.isArray(chats)) {
+  store.chats = new Map(chats);
+} else {
+  store.chats = new Map();
+}
+
+if (Array.isArray(contacts)) {
+  store.contacts = new Map(contacts);
+} else {
+  store.contacts = new Map();
+}

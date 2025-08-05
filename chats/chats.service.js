@@ -2,14 +2,17 @@
 import { store, saveStore } from '../store/store.js';
 
 export async function getAllChats(sock) {
+  let chatMap = sock.store?.chats || store.chats;
 
-  const chatMap = sock.store?.chats || store.chats;
+  if (!(chatMap instanceof Map)) {
+    console.warn('⚠️ chatMap no es un Map. Forzando nuevo Map');
+    chatMap = new Map();
+    sock.store.chats = chatMap;
+  }
 
   if (chatMap.size === 0) {
     const fetched = await sock.fetchChats();
-
     fetched.forEach(chat => chatMap.set(chat.id, chat));
-
     saveStore(store);
   }
 
