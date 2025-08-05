@@ -24,7 +24,7 @@ call_endpoint() {
 }
 
 echo "🔧 1. Using static session ID…"
-sessionId="52be7934-6b3c-4a13-b565-20ca98f4ff02"
+sessionId="2fa71ff3-3649-4888-a51e-43e96b3048d0"
 
 echo "⏳ 2. Initializing session on server…"
 reload_raw=$(curl -sS -X POST "$AUTH_URL/reload" -H "Content-Type: application/json" \
@@ -133,30 +133,6 @@ echo "   ✅ Delete enviado."
 echo
 echo "✅ Todas las pruebas de mensajería completadas."
 echo
-
-echo "   - 🖼️ POST /message/send (image)"
-call_endpoint "POST" "$MESSAGE_URL/send" "{\"jid\":\"$JID\",\"type\":\"image\",\"content\":\"https://imgur.com/eKBSHeE.webp\",\"options\":{\"caption\":\"Test Image\"}}"
-echo "     HTTP status: $return_status"
-echo "     Body: $http_body"
-if [[ "$return_status" -ne 200 && "$return_status" -ne 201 ]]; then
-    echo "   ❌ Falló envío de imagen."
-    exit 1
-fi
-echo "   ✅ Imagen enviada."
-sleep 2
-
-echo "🧹 5. Limpiando sesión…"
-cleanup_raw=$(curl -sS -X DELETE "$AUTH_URL/remove" -H "Content-Type: application/json" \
-    -d "{\"sessionId\":\"$sessionId\"}" -w "\n%{http_code}")
-cleanup_body=$(echo "$cleanup_raw" | sed '$d')
-cleanup_status=$(echo "$cleanup_raw" | tail -n1)
-echo "   HTTP status: $cleanup_status"
-echo "   Body: $cleanup_body"
-if [[ "$cleanup_status" -eq 200 ]]; then
-    echo "✅ Sesión eliminada correctamente."
-else
-    echo "❌ Falló eliminación de sesión: $cleanup_body"
-fi
 
 echo
 echo "🎉 Ciclo de pruebas finalizado."

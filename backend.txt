@@ -33,6 +33,7 @@ export function saveStore(store) {
     const data = {
       chats:    store.chats.all ? store.chats.all() : [],
       contacts: store.contacts.all ? store.contacts.all() : [],
+      messages: store.messages.all ? store.messages.all() : []
     };
     if (!fs.existsSync(SESSION_BASE_DIR)) {
       fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
@@ -44,6 +45,34 @@ export function saveStore(store) {
 }
 
 export const store = makeInMemoryStore({ logger });
+
+store.messages = {
+  data: new Map(),
+  upsert(msg) {
+    const id = msg?.key?.id;
+    if (id) this.data.set(id, msg);
+  },
+  get(id) {
+    return this.data.get(id);
+  },
+  all() {
+    return Array.from(this.data.values());
+  }
+};
+
+store.contacts = {
+  data: new Map(),
+  upsert(contact) {
+    const id = contact?.id || contact?.jid;
+    if (id) this.data.set(id, contact);
+  },
+  get(id) {
+    return this.data.get(id);
+  },
+  all() {
+    return Array.from(this.data.values());
+  }
+};
 
 const loaded = loadStore();
 
@@ -57,9 +86,13 @@ if (Array.isArray(loaded.chats)) {
 
 if (Array.isArray(loaded.contacts)) {
   for (const contact of loaded.contacts) {
-    if (contact.id) {
-      store.contacts.upsert(contact);
-    }
+    store.contacts.upsert(contact);
+  }
+}
+
+if (Array.isArray(loaded.messages)) {
+  for (const msg of loaded.messages) {
+    store.messages.upsert(msg);
   }
 }
 // @path: message/message.routes.js
@@ -398,11 +431,11 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   store.bind(sock.ev);
 
   sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
-
     for (const chat of chats) {
       store.chats.upsert(chat);
     }
     for (const msg of messages) {
+
       store.messages.upsert(msg);
     }
     for (const contact of contacts) {
