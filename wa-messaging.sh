@@ -24,7 +24,7 @@ call_endpoint() {
 }
 
 echo "🔧 1. Using static session ID…"
-sessionId="07677b8b-e22b-43ac-8308-1fc0692b8987"
+sessionId="d95a3281-24d5-4359-9a01-03b5dfd4db8a"
 
 echo "⏳ 2. Initializing session on server…"
 reload_raw=$(curl -sS -X POST "$AUTH_URL/reload" -H "Content-Type: application/json" \
@@ -121,17 +121,6 @@ fi
 echo "   ✅ Forward enviado."
 sleep 2
 
-echo "   - 🖼️ POST /message/send (image)"
-call_endpoint "POST" "$MESSAGE_URL/send" "{\"jid\":\"$JID\",\"type\":\"image\",\"content\":\"https://i.imgur.com/LPVsY29.jpeg\",\"options\":{\"caption\":\"Test Image\"}}"
-echo "     HTTP status: $return_status"
-echo "     Body: $http_body"
-if [[ "$return_status" -ne 200 && "$return_status" -ne 201 ]]; then
-    echo "   ❌ Falló envío de imagen."
-    exit 1
-fi
-echo "   ✅ Imagen enviada."
-sleep 2
-
 echo "   - 🗑️ POST /message/delete"
 call_endpoint "POST" "$MESSAGE_URL/delete" "{\"jid\":\"$JID\",\"messageId\":\"$messageId\"}"
 echo "     HTTP status: $return_status"
@@ -144,6 +133,17 @@ echo "   ✅ Delete enviado."
 echo
 echo "✅ Todas las pruebas de mensajería completadas."
 echo
+
+echo "   - 🖼️ POST /message/send (image)"
+call_endpoint "POST" "$MESSAGE_URL/send" "{\"jid\":\"$JID\",\"type\":\"image\",\"content\":\"https://imgur.com/eKBSHeE.webp\",\"options\":{\"caption\":\"Test Image\"}}"
+echo "     HTTP status: $return_status"
+echo "     Body: $http_body"
+if [[ "$return_status" -ne 200 && "$return_status" -ne 201 ]]; then
+    echo "   ❌ Falló envío de imagen."
+    exit 1
+fi
+echo "   ✅ Imagen enviada."
+sleep 2
 
 echo "🧹 5. Limpiando sesión…"
 cleanup_raw=$(curl -sS -X DELETE "$AUTH_URL/remove" -H "Content-Type: application/json" \
