@@ -8,6 +8,5 @@ router.use(checkSession);
 
 router.get('/', ctrl.getAllChats);
 router.get('/:jid', ctrl.getChatByJid);
-router.get('/pinned', ctrl.getPinnedChats);
 
 export default router;

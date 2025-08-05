@@ -1,4 +1,6 @@
+
 // @path: client/socketFactory.js
+
 import {
   makeWASocket,
   fetchLatestBaileysVersion,
@@ -26,26 +28,19 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
+
   store.bind(sock.ev);
 
   sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
-    for (const chat of chats) {
-      store.chats.upsert(chat);
-    }
-    for (const msg of messages) {
-
-      store.messages.upsert(msg);
-    }
-    for (const contact of contacts) {
-      store.contacts.upsert(contact);
-    }
-    saveStore(store);
+    chats.forEach(chat    => store.chats.upsert(chat));
+    messages.forEach(msg   => store.messages.upsert(msg));
+    contacts.forEach(contact => store.contacts.upsert(contact));
+    saveStore();
   });
 
-  sock.ev.on('creds.update', () => saveStore(store));
-  sock.ev.on('chats.set',      () => saveStore(store));
-  sock.ev.on('chats.upsert',   () => saveStore(store));
-  sock.ev.on('chats.update',   () => saveStore(store));
+  ['creds.update','chats.set','chats.upsert','chats.update'].forEach(evt =>
+    sock.ev.on(evt, () => saveStore())
+  );
 
   return sock;
 }

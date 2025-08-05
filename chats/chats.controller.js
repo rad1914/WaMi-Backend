@@ -9,7 +9,3 @@ export const getAllChats = wrapController(async (_input, req) =>
 export const getChatByJid = wrapController(async ({ jid }, req) =>
   service.getChatByJid(req.sock, jid)
 );
-
-export const getPinnedChats = wrapController((_, req) =>
-  svc.getPinnedChats(req.sock)
-);
