@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MultiBaileys Frontend</title>
+    <title>MultiBaileys Control Panel</title>
     <style>
         :root {
             --primary-color: #007bff;
@@ -13,7 +13,7 @@
             --danger-color: #dc3545;
             --light-color: #f8f9fa;
             --dark-color: #343a40;
-            --border-radius: 0.25rem;
+            --border-radius: 0.375rem;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -21,6 +21,7 @@
             padding: 20px;
             background-color: #f4f4f9;
             color: var(--dark-color);
+            line-height: 1.5;
         }
         .container {
             max-width: 800px;
@@ -28,7 +29,7 @@
             background: white;
             padding: 20px;
             border-radius: var(--border-radius);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         h1, h2 {
             color: var(--primary-color);
@@ -48,24 +49,31 @@
         }
         .card {
             background: var(--light-color);
-            padding: 15px;
+            padding: 20px;
             border-radius: var(--border-radius);
             border: 1px solid #e3e3e3;
+            margin-top: 20px;
         }
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 1rem;
         }
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 0.5rem;
             font-weight: bold;
         }
         input[type="text"], input[type="url"], select, textarea {
             width: 100%;
-            padding: 8px;
+            padding: 0.5rem;
             box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: var(--border-radius);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
         }
         input:disabled {
             background-color: #e9ecef;
@@ -78,12 +86,17 @@
             padding: 10px 15px;
             border-radius: var(--border-radius);
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s, transform 0.1s;
             margin-right: 5px;
             margin-top: 5px;
+            font-weight: 500;
         }
         button:hover:not(:disabled) {
             background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(0);
         }
         button:disabled {
             background-color: #a0a0a0;
@@ -95,9 +108,15 @@
         button.success:hover:not(:disabled) { background-color: #218838; }
         button.secondary { background-color: var(--secondary-color); }
         button.secondary:hover:not(:disabled) { background-color: #5a6268; }
+        #qr-display {
+            text-align: center;
+            margin-top: 15px;
+        }
         #qr-code {
             max-width: 250px;
-            margin-top: 15px;
+            border: 5px solid white;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         #response-container {
             margin-top: 20px;
@@ -109,9 +128,42 @@
             overflow-y: auto;
             white-space: pre-wrap;
             word-wrap: break-word;
+            font-family: 'Courier New', Courier, monospace;
         }
-        #messaging-section {
-            display: none; /* Hidden by default */
+        .hidden-section {
+            display: none;
+        }
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .modal-buttons {
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -123,93 +175,127 @@
     <div class="card">
         <h2>Authentication</h2>
         <div class="form-group">
-            <label for="sessionIdDisplay">Current Session ID</label>
-            <input type="text" id="sessionIdDisplay" placeholder="Click 'Create Session' to start" disabled>
+            <label for="sessionIdInput">Session ID</label>
+            <input type="text" id="sessionIdInput" placeholder="Enter existing ID or create a new one">
         </div>
-        <button id="createSessionBtn">Create Session</button>
+        <button id="createSessionBtn">Create New Session</button>
+        <button id="reloadSessionBtn" class="secondary">Use/Reload This Session</button>
+        <hr style="margin: 20px 0;">
         <button id="getQrBtn" disabled>Get QR</button>
         <button id="checkStatusBtn" class="secondary" disabled>Check Status</button>
         <button id="removeSessionBtn" class="danger" disabled>Remove Session</button>
-        <div id="auth-status"></div>
+        <div id="auth-status" style="margin-top: 15px; font-weight: 500;"></div>
         <div id="qr-display"></div>
     </div>
 
-    <div id="messaging-section" class="card" style="margin-top: 20px;">
-        <h2>Messaging</h2>
-        <div class="grid">
-            <div>
-                <div class="form-group">
-                    <label for="jid">Recipient JID</label>
-                    <input type="text" id="jid" placeholder="e.g., 1234567890@s.whatsapp.net">
+    <div id="controls-section" class="hidden-section">
+        <div id="chats-section" class="card">
+            <h2>Chats</h2>
+            <div class="form-group">
+                <label for="chatJidInput">Chat JID (for 'Get by JID' action)</label>
+                <input type="text" id="chatJidInput" placeholder="e.g., 1234567890@s.whatsapp.net">
+            </div>
+            <button id="getAllChatsBtn">Get All Chats</button>
+            <button id="getPinnedChatsBtn">Get Pinned Chats</button>
+            <button id="getChatByJidBtn">Get by JID</button>
+        </div>
+
+        <div id="messaging-section" class="card">
+            <h2>Messaging</h2>
+            <div class="grid">
+                <div>
+                    <div class="form-group">
+                        <label for="jid">Recipient JID</label>
+                        <input type="text" id="jid" placeholder="e.g., 1234567890@s.whatsapp.net">
+                    </div>
+                    <div class="form-group">
+                        <label for="messageType">Message Type</label>
+                        <select id="messageType">
+                            <option value="text">Text</option>
+                            <option value="image">Image URL</option>
+                            <option value="video">Video URL</option>
+                            <option value="audio">Audio URL</option>
+                            <option value="document">Document URL</option>
+                            <option value="sticker">Sticker URL</option>
+                        </select>
+                    </div>
+                     <div class="form-group" id="url-group" style="display: none;">
+                        <label for="contentUrl">Content URL</label>
+                        <input type="url" id="contentUrl" placeholder="https://example.com/file.jpg">
+                     </div>
+                    <div class="form-group" id="fileName-group" style="display: none;">
+                        <label for="fileName">File Name (for Documents)</label>
+                        <input type="text" id="fileName" placeholder="e.g., report.pdf">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="messageType">Message Type</label>
-                    <select id="messageType">
-                        <option value="text">Text</option>
-                        <option value="image">Image URL</option>
-                        <option value="video">Video URL</option>
-                        <option value="audio">Audio URL</option>
-                        <option value="document">Document URL</option>
-                        <option value="sticker">Sticker URL</option>
-                    </select>
-                </div>
-                 <div class="form-group" id="url-group" style="display: none;">
-                    <label for="contentUrl">Content URL</label>
-                    <input type="text" id="contentUrl" placeholder="http://example.com/file.jpg">
-                </div>
-                <div class="form-group" id="fileName-group" style="display: none;">
-                    <label for="fileName">File Name (for Documents)</label>
-                    <input type="text" id="fileName" placeholder="e.g., report.pdf">
+                <div>
+                    <div class="form-group">
+                        <label for="messageId">Message ID (for Reply, Edit, React, Delete)</label>
+                        <input type="text" id="messageId" placeholder="The ID of the target message">
+                    </div>
+                    <div class="form-group">
+                        <label for="forwardJid">Forward to JID</label>
+                        <input type="text" id="forwardJid" placeholder="e.g., 0987654321@s.whatsapp.net">
+                    </div>
                 </div>
             </div>
-            <div>
-                <div class="form-group">
-                    <label for="messageId">Message ID (for Reply, Edit, React, Delete)</label>
-                    <input type="text" id="messageId" placeholder="The ID of the target message">
-                </div>
-                <div class="form-group">
-                    <label for="forwardJid">Forward to JID</label>
-                    <input type="text" id="forwardJid" placeholder="e.g., 0987654321@s.whatsapp.net">
-                </div>
+            <div class="form-group">
+                <label for="messageContent">Content</label>
+                <textarea id="messageContent" rows="3" placeholder="Type your message, emoji, or new text here..."></textarea>
             </div>
+            <div class="form-group">
+                <label for="forwardMessageObject">Message Object to Forward (JSON)</label>
+                <textarea id="forwardMessageObject" rows="4" placeholder="Paste the full message JSON object here to forward it."></textarea>
+            </div>
+            <button id="sendBtn" class="success">Send</button>
+            <button id="replyBtn">Reply</button>
+            <button id="editBtn">Edit</button>
+            <button id="reactBtn">React</button>
+            <button id="forwardBtn">Forward</button>
+            <button id="deleteBtn" class="danger">Delete</button>
         </div>
-        <div class="form-group">
-            <label for="messageContent">Content</label>
-            <textarea id="messageContent" rows="3" placeholder="Type your message, emoji, or new text here..."></textarea>
-        </div>
-        <div class="form-group">
-            <label for="forwardMessageObject">Message Object to Forward (JSON)</label>
-            <textarea id="forwardMessageObject" rows="4" placeholder="Paste the full message JSON object here to forward it."></textarea>
-        </div>
-        <button id="sendBtn" class="success">Send</button>
-        <button id="replyBtn">Reply</button>
-        <button id="editBtn">Edit</button>
-        <button id="reactBtn">React</button>
-        <button id="forwardBtn">Forward</button>
-        <button id="deleteBtn" class="danger">Delete</button>
     </div>
 
     <h2>API Response</h2>
     <pre id="response-container">Responses from the server will appear here...</pre>
 </div>
 
+<div id="custom-modal" class="modal-overlay">
+    <div class="modal">
+        <p id="modal-text"></p>
+        <div id="modal-buttons" class="modal-buttons">
+            <button id="modal-confirm-btn" class="success">Confirm</button>
+            <button id="modal-cancel-btn" class="secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'http://192.168.1.68:3000/api'; // Adjusted for local development
+        const API_BASE_URL = 'http://192.168.1.68:3000/api';
 
         // --- State ---
         let currentSessionId = null;
+
         // --- DOM Elements ---
-        const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+        const sessionIdInput = document.getElementById('sessionIdInput');
         const createSessionBtn = document.getElementById('createSessionBtn');
+        const reloadSessionBtn = document.getElementById('reloadSessionBtn');
         const getQrBtn = document.getElementById('getQrBtn');
         const checkStatusBtn = document.getElementById('checkStatusBtn');
         const removeSessionBtn = document.getElementById('removeSessionBtn');
         const authStatusDiv = document.getElementById('auth-status');
         const qrDisplayDiv = document.getElementById('qr-display');
         const responseContainer = document.getElementById('response-container');
-        
-        const messagingSection = document.getElementById('messaging-section');
+        const controlsSection = document.getElementById('controls-section');
+
+        // Chat Elements
+        const getAllChatsBtn = document.getElementById('getAllChatsBtn');
+        const getPinnedChatsBtn = document.getElementById('getPinnedChatsBtn');
+        const getChatByJidBtn = document.getElementById('getChatByJidBtn');
+        const chatJidInput = document.getElementById('chatJidInput');
+
+        // Messaging Elements
         const jidInput = document.getElementById('jid');
         const messageIdInput = document.getElementById('messageId');
         const messageTypeSelect = document.getElementById('messageType');
@@ -218,7 +304,6 @@
         const urlGroup = document.getElementById('url-group');
         const fileNameInput = document.getElementById('fileName');
         const fileNameGroup = document.getElementById('fileName-group');
-
         const sendBtn = document.getElementById('sendBtn');
         const replyBtn = document.getElementById('replyBtn');
         const editBtn = document.getElementById('editBtn');
@@ -228,58 +313,85 @@
         const forwardJidInput = document.getElementById('forwardJid');
         const forwardMessageObjectInput = document.getElementById('forwardMessageObject');
 
+        // Modal Elements
+        const modal = document.getElementById('custom-modal');
+        const modalText = document.getElementById('modal-text');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+        // --- Modal Functions ---
+        function showAlert(message) {
+            modalText.textContent = message;
+            modalConfirmBtn.style.display = 'none';
+            modalCancelBtn.textContent = 'Close';
+            modal.classList.add('visible');
+            return new Promise(resolve => {
+                modalCancelBtn.onclick = () => {
+                    modal.classList.remove('visible');
+                    resolve(false); // Consistent return
+                };
+            });
+        }
+
+        function showConfirm(message) {
+            modalText.textContent = message;
+            modalConfirmBtn.style.display = 'inline-block';
+            modalCancelBtn.textContent = 'Cancel';
+            modal.classList.add('visible');
+            return new Promise(resolve => {
+                modalConfirmBtn.onclick = () => {
+                    modal.classList.remove('visible');
+                    resolve(true);
+                };
+                modalCancelBtn.onclick = () => {
+                    modal.classList.remove('visible');
+                    resolve(false);
+                };
+            });
+        }
+
         // --- UI Update Functions ---
         function setSessionActive(sessionId) {
             currentSessionId = sessionId;
-            sessionIdDisplay.value = sessionId;
+            sessionIdInput.value = sessionId;
             getQrBtn.disabled = false;
             checkStatusBtn.disabled = false;
             removeSessionBtn.disabled = false;
-            messagingSection.style.display = 'block';
+            controlsSection.style.display = 'block';
             authStatusDiv.innerHTML = '';
             qrDisplayDiv.innerHTML = '';
         }
 
         function setSessionInactive() {
-            setAuthStatus(`Session '${currentSessionId}' removed.`, 'success');
+            setAuthStatus(`Session '${currentSessionId}' removed or deactivated.`, 'success');
             currentSessionId = null;
-            sessionIdDisplay.value = '';
-            sessionIdDisplay.placeholder = "Click 'Create Session' to start";
+            sessionIdInput.value = '';
+            sessionIdInput.placeholder = "Enter existing ID or create a new one";
             getQrBtn.disabled = true;
             checkStatusBtn.disabled = true;
             removeSessionBtn.disabled = true;
-            messagingSection.style.display = 'none';
+            controlsSection.style.display = 'none';
             qrDisplayDiv.innerHTML = '';
         }
-        
+
         // --- API & Helper Functions ---
         async function fetchApi(endpoint, options = {}) {
-            if (!currentSessionId && !endpoint.includes('/auth/create')) {
-                alert('Please create a session first.');
+            const isCreatingSession = endpoint.includes('/auth/create');
+            if (!currentSessionId && !isCreatingSession) {
+                showAlert('Please create or reload a session first.');
                 return;
             }
 
             let url = `${API_BASE_URL}${endpoint}`;
             const headers = { 'Content-Type': 'application/json', ...options.headers };
-            const isGetRequest = options.method === 'GET' || !options.method;
 
-            // For message routes, middleware requires the session ID in the header.
-            // For auth routes, it's passed in the query/body.
-            if (currentSessionId) {
-                if (endpoint.startsWith('/message')) {
-                    headers['x-session-id'] = currentSessionId;
-                }
+            if (currentSessionId && (endpoint.startsWith('/message') || endpoint.startsWith('/chats'))) {
+                headers['x-session-id'] = currentSessionId;
+            }
 
-                if (isGetRequest) {
-                    const params = new URLSearchParams({ sessionId: currentSessionId });
-                    url += `?${params}`;
-                } else if (options.body) {
-                    // The backend services also expect sessionId in the body,
-                    // so we keep this part.
-                    const body = JSON.parse(options.body);
-                    body.sessionId = currentSessionId;
-                    options.body = JSON.stringify(body);
-                }
+            if (currentSessionId && (options.method === 'GET' || !options.method) && endpoint.startsWith('/auth')) {
+                const params = new URLSearchParams({ sessionId: currentSessionId });
+                url += `?${params}`;
             }
 
             try {
@@ -288,7 +400,9 @@
                 displayResponse(result);
                 return result;
             } catch (error) {
-                displayResponse({ error: error.message });
+                const errorResponse = { error: 'Network or server error', message: error.message };
+                displayResponse(errorResponse);
+                showAlert(`Error: ${error.message}`);
             }
         }
 
@@ -298,16 +412,15 @@
 
         function setAuthStatus(message, type) {
             authStatusDiv.textContent = message;
-            authStatusDiv.style.color = type === 'success' ? 'green' : 'red';
-            authStatusDiv.style.marginTop = '10px';
+            authStatusDiv.style.color = type === 'success' ? 'var(--success-color)' : 'var(--danger-color)';
+            authStatusDiv.style.marginTop = '15px';
         }
-        
+
         // --- Event Listeners ---
         messageTypeSelect.addEventListener('change', () => {
             const selectedType = messageTypeSelect.value;
             const isUrlType = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType);
             urlGroup.style.display = isUrlType ? 'block' : 'none';
-            // SHOW FILENAME INPUT ONLY FOR DOCUMENTS
             fileNameGroup.style.display = selectedType === 'document' ? 'block' : 'none';
         });
 
@@ -318,7 +431,23 @@
                 setSessionActive(result.sessionId);
                 setAuthStatus(`Session '${result.sessionId}' created. Click 'Get QR' to authenticate.`, 'success');
             } else {
-                setAuthStatus('Failed to create session.', 'danger');
+                setAuthStatus(`Failed to create session: ${result?.message || 'Unknown error'}`, 'danger');
+            }
+        });
+
+        reloadSessionBtn.addEventListener('click', async () => {
+            const sessionId = sessionIdInput.value.trim();
+            if (!sessionId) {
+                showAlert('Please enter a Session ID to reload.');
+                return;
+            }
+            const body = { sessionId };
+            const result = await fetchApi('/auth/reload', { method: 'POST', body: JSON.stringify(body) });
+            if (result && result.reloaded) {
+                setSessionActive(sessionId);
+                setAuthStatus(`Successfully reloaded session '${sessionId}'.`, 'success');
+            } else {
+                setAuthStatus(`Failed to reload session: ${result?.message || 'Unknown error'}`, 'danger');
             }
         });
 
@@ -329,11 +458,11 @@
                 if (result.qr) {
                     qrDisplayDiv.innerHTML = `<img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.qr)}" alt="QR Code">`;
                     setAuthStatus('Scan the QR code with WhatsApp.', 'success');
-                } else if (result.success) {
+                } else if (result.authenticated === true || result.success === true) {
                     qrDisplayDiv.innerHTML = '';
                     setAuthStatus('Session is already connected!', 'success');
                 } else {
-                     qrDisplayDiv.innerHTML = 'Failed to get QR code. Maybe the session is already connected?';
+                     qrDisplayDiv.innerHTML = `Failed to get QR code. ${result.message || ''}`;
                 }
             }
         });
@@ -348,86 +477,126 @@
         });
 
         removeSessionBtn.addEventListener('click', async () => {
-             if (!confirm('Are you sure you want to remove this session?')) return;
-             // The body only needs the sessionId, which fetchApi will add
+             const confirmed = await showConfirm('Are you sure you want to remove this session? This action cannot be undone.');
+             if (!confirmed) return;
+
+             const body = { sessionId: currentSessionId };
              const result = await fetchApi('/auth/remove', {
                  method: 'DELETE',
-                 body: JSON.stringify({}) 
+                 body: JSON.stringify(body)
              });
              if (result && result.success) {
                 setSessionInactive();
+             } else {
+                showAlert(`Failed to remove session: ${result?.message || 'Unknown error'}`);
              }
+        });
+
+        // Chat Actions
+        getAllChatsBtn.addEventListener('click', () => fetchApi('/chats/', { method: 'GET' }));
+        getPinnedChatsBtn.addEventListener('click', () => fetchApi('/chats/pinned', { method: 'GET' }));
+        getChatByJidBtn.addEventListener('click', () => {
+            const jid = chatJidInput.value.trim();
+            if (!jid) {
+                showAlert('Please enter a JID to get the chat.');
+                return;
+            }
+            fetchApi(`/chats/${jid}`, { method: 'GET' });
         });
 
         // Messaging Actions
         sendBtn.addEventListener('click', () => {
             const type = messageTypeSelect.value;
             const isUrlBased = ['image', 'video', 'audio', 'document', 'sticker'].includes(type);
-            const content = isUrlBased ? contentUrlInput.value : messageContentInput.value;
-            const options = {};
+            const content = isUrlBased ? contentUrlInput.value.trim() : messageContentInput.value;
+            const jid = jidInput.value.trim();
 
+            if (!jid || !content) {
+                showAlert('Recipient JID and content cannot be empty.');
+                return;
+            }
+
+            const options = {};
             if (type === 'document' && fileNameInput.value) {
-                options.fileName = fileNameInput.value;
+                options.fileName = fileNameInput.value.trim();
             }
             
-            const body = {
-                jid: jidInput.value,
-                type: type,
-                content: content,
-                options: options
-            };
+            const body = { jid, type, content, options };
             fetchApi('/message/send', { method: 'POST', body: JSON.stringify(body) });
         });
 
         replyBtn.addEventListener('click', () => {
-            const body = {
-                jid: jidInput.value,
-                content: messageContentInput.value,
-                quotedMessageId: messageIdInput.value,
-                type: 'text' // Be explicit
-            };
+            const jid = jidInput.value.trim();
+            const content = messageContentInput.value;
+            const quotedMessageId = messageIdInput.value.trim();
+
+            if (!jid || !content || !quotedMessageId) {
+                showAlert('JID, message content, and quoted message ID are required for a reply.');
+                return;
+            }
+
+            const body = { jid, content, quotedMessageId, type: 'text' };
             fetchApi('/message/reply', { method: 'POST', body: JSON.stringify(body) });
         });
-        
+
         editBtn.addEventListener('click', () => {
-             const body = {
-                jid: jidInput.value,
-                messageId: messageIdInput.value,
-                newText: messageContentInput.value,
-            };
+            const jid = jidInput.value.trim();
+            const messageId = messageIdInput.value.trim();
+            const newText = messageContentInput.value;
+
+            if (!jid || !messageId || !newText) {
+                showAlert('JID, message ID, and new text are required to edit.');
+                return;
+            }
+
+            const body = { jid, messageId, newText };
             fetchApi('/message/edit', { method: 'POST', body: JSON.stringify(body) });
         });
 
         reactBtn.addEventListener('click', () => {
-            const body = {
-                jid: jidInput.value,
-                messageId: messageIdInput.value,
-                emoji: messageContentInput.value,
-            };
+            const jid = jidInput.value.trim();
+            const messageId = messageIdInput.value.trim();
+            const emoji = messageContentInput.value.trim();
+
+            if (!jid || !messageId || !emoji) {
+                showAlert('JID, message ID, and an emoji are required to react.');
+                return;
+            }
+
+            const body = { jid, messageId, emoji };
             fetchApi('/message/react', { method: 'POST', body: JSON.stringify(body) });
         });
-        
+
         deleteBtn.addEventListener('click', () => {
-            const body = {
-                jid: jidInput.value,
-                messageId: messageIdInput.value,
-            };
+            const jid = jidInput.value.trim();
+            const messageId = messageIdInput.value.trim();
+
+            if (!jid || !messageId) {
+                showAlert('JID and message ID are required to delete a message.');
+                return;
+            }
+
+            const body = { jid, messageId };
             fetchApi('/message/delete', { method: 'POST', body: JSON.stringify(body) });
         });
 
         forwardBtn.addEventListener('click', () => {
             let messageObject;
-            try {
-                messageObject = JSON.parse(forwardMessageObjectInput.value);
-            } catch (e) {
-                alert('Invalid JSON in "Message Object to Forward" field.');
+            const forwardJid = forwardJidInput.value.trim();
+            
+            if (!forwardJid) {
+                showAlert('A "Forward to JID" is required.');
                 return;
             }
 
-            const body = {
-                to: forwardJidInput.value,
-                message: messageObject
-            };
+            try {
+                messageObject = JSON.parse(forwardMessageObjectInput.value);
+            } catch (e) {
+                showAlert('Invalid JSON in "Message Object to Forward" field.');
+                return;
+            }
+
+            const body = { to: forwardJid, message: messageObject };
             fetchApi('/message/forward', { method: 'POST', body: JSON.stringify(body) });
         });
     });
@@ -435,3 +604,4 @@
 
 </body>
 </html>
+

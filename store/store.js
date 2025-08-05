@@ -1,40 +1,36 @@
 // @path: store/store.js
 import fs from 'fs';
-import { makeInMemoryStore, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import { makeInMemoryStore } from '@whiskeysockets/baileys';
 import logger from '../utils/logger.js';
 import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js';
 
-function getEntries(maybeMap) {
-
-  if (maybeMap?.entries && typeof maybeMap.entries === 'function') {
-    return [...maybeMap.entries()];
+function entriesOf(maybeMapOrObj) {
+  if (maybeMapOrObj?.entries && typeof maybeMapOrObj.entries === 'function') {
+    return [...maybeMapOrObj.entries()];
   }
-
-  if (maybeMap && typeof maybeMap === 'object') {
-    return Object.entries(maybeMap);
+  if (maybeMapOrObj && typeof maybeMapOrObj === 'object') {
+    return Object.entries(maybeMapOrObj);
   }
-
   return [];
 }
 
 function loadStore() {
   try {
     if (fs.existsSync(STORE_FILE)) {
-      const data = fs.readFileSync(STORE_FILE, { encoding: 'utf-8' });
+      const data = fs.readFileSync(STORE_FILE, 'utf-8');
       return JSON.parse(data);
     }
   } catch (e) {
     console.warn('⚠️ Could not read store file:', e);
   }
-
   return {};
 }
 
 export function saveStore(store) {
   try {
     const data = {
-      chats: getEntries(store.chats),
-      contacts: getEntries(store.contacts),
+      chats:    entriesOf(store.chats),
+      contacts: entriesOf(store.contacts),
     };
 
     if (!fs.existsSync(SESSION_BASE_DIR)) {
@@ -50,10 +46,5 @@ export function saveStore(store) {
 export const store = makeInMemoryStore({ logger });
 
 const { chats, contacts } = loadStore();
-if (Array.isArray(chats)) {
-  store.chats = new Map(chats);
-}
-if (contacts) {
-
-  store.contacts = contacts;
-}
+if (Array.isArray(chats)) store.chats = new Map(chats);
+if (contacts)       store.contacts = contacts;

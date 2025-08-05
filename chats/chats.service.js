@@ -1,16 +1,21 @@
 // @path: chats/chats.service.js
 export function getAllChats(sock) {
-  const chats = sock.store?.chats || new Map();
-  return Array.from(chats.values());
+  const chatsMap = sock.store?.chats || new Map();
+  return [...chatsMap.values()];
+}
+
+export function getChatByJid(sock, jid) {
+  const chatsMap = sock.store?.chats || new Map();
+  const chat = chatsMap.get(jid);
+  if (!chat) {
+    const error = new Error('Chat not found');
+    error.status = 404;
+    throw error;
+  }
+  return chat;
 }
 
 export function getPinnedChats(sock) {
   const chats = sock.store?.chats || new Map();
   return Array.from(chats.values()).filter(chat => chat.pinned);
-}
-
-export function getChatByJid(sock, jid) {
-  const chat = sock.store?.chats?.get(jid);
-  if (!chat) throw Object.assign(new Error('Chat not found'), { status: 404 });
-  return chat;
 }

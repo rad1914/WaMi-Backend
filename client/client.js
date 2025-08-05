@@ -1,54 +1,30 @@
 // @path: client/client.js
+
 import fs from 'fs';
-import path from 'path';
 import logger from '../utils/logger.js';
-import { store } from '../store/store.js';
-import { saveStore } from '../store/store.js';
-import { createSocket } from './socketFactory.js';
-import { initAuthState } from '../utils/session.js';
 import { initSession } from './session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
-let sharedClient = null;
-
 export async function initClient() {
-
-  const { state, saveCreds } = await initAuthState('auth');
-  const sock = await createSocket({
-    authState: { ...state, saveCreds },
-    sessionId: 'shared',
-    browserName: 'BaileysAPI',
-    reinit: initClient
-  });
-
-  store.bind(sock.ev);
-  sock.ev.on('creds.update', () => {
-    logger.info('Shared credentials updated');
-    saveStore(store);
-  });
-
-  sharedClient = sock;
+  if (!fs.existsSync(SESSION_BASE_DIR)) {
+    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+    logger.info(`📂 Created sessions directory at ${SESSION_BASE_DIR}`);
+  }
 
   try {
-    const entries = fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true });
-    const sessionDirs = entries
-      .filter(entry => entry.isDirectory() && entry.name !== 'auth')
-      .map(entry => entry.name);
+    const sessionDirs = fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })
+      .filter(dir => dir.isDirectory() && dir.name !== 'auth')
+      .map(dir => dir.name);
 
-    for (const sessionId of sessionDirs) {
+    for (const id of sessionDirs) {
       try {
-        await initSession(sessionId);
-        logger.info(`✅ [${sessionId}] session restored`);
+        await initSession(id);
+        logger.info(`✅ [${id}] session restored`);
       } catch (err) {
-        logger.warn(`⚠️ Failed to restore session '${sessionId}':`, err.message);
+        logger.warn(`⚠️ Failed to restore session '${id}': ${err.message}`);
       }
     }
   } catch (err) {
-    logger.error('❌ Failed to scan session directories:', err.message);
+    logger.error(`❌ Failed to scan session directories: ${err.message}`);
   }
-}
-
-export function getClient() {
-  if (!sharedClient) throw new Error('Client not initialized');
-  return sharedClient;
 }

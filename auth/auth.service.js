@@ -16,28 +16,16 @@ export async function removeSession({ sessionId }) {
 }
 
 export async function getQRCode({ sessionId }) {
-  if (!sessionId) {
-    throw Object.assign(new Error('sessionId is required'), { status: 400 });
-  }
-
+  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
   const { sock } = await initSession(sessionId);
-
-  if (sock.user?.id) {
-    return { success: true };
-  }
-
+  if (sock.user?.id) return { success: true };
   const qr = getPendingQR(sessionId);
-  if (qr) {
-    return { qr };
-  }
-
+  if (qr) return { qr };
   throw Object.assign(new Error('QR not yet available'), { status: 404 });
 }
 
 export function checkAuth({ sessionId }) {
-  if (!sessionId) {
-    throw Object.assign(new Error('sessionId is required'), { status: 400 });
-  }
+  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
   const client = getSession(sessionId);
   return { authenticated: !!client.user?.id };
 }
