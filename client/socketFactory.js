@@ -6,6 +6,7 @@ import {
 } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
 import { store } from '../store/store.js';
+import { saveStore } from '../store/store.js';
 
 let cachedVersion = null;
 async function getBaileysVersion() {
@@ -26,6 +27,14 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-  store.bind(sock.ev);     
+
+  store.bind(sock.ev);
+
+  sock.ev.on('creds.update', () => saveStore(store));
+
+  sock.ev.on('chats.set',    () => saveStore(store));
+  sock.ev.on('chats.upsert', () => saveStore(store));
+  sock.ev.on('chats.update', () => saveStore(store));
+
   return sock;
 }

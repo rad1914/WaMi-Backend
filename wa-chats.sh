@@ -84,18 +84,6 @@ fi
 echo "   ✅ Successfully retrieved all chats."
 sleep 1
 
-echo "   - 📌 GET /chats/pinned"
-call_endpoint "GET" "$CHATS_URL/pinned"
-echo "     HTTP status: $return_status"
-echo "     Body: $http_body"
-if [[ "$return_status" -ne 200 ]];
-then
-    echo "   ❌ Failed to get pinned chats."
-    exit 1
-fi
-echo "   ✅ Successfully retrieved pinned chats."
-sleep 1
-
 echo "   - 👤 GET /chats/:jid"
 call_endpoint "GET" "$CHATS_URL/$JID"
 echo "     HTTP status: $return_status"

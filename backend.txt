@@ -59,8 +59,18 @@ export function saveStore(store) {
 export const store = makeInMemoryStore({ logger });
 
 const { chats, contacts } = loadStore();
-if (Array.isArray(chats)) store.chats = new Map(chats);
-if (contacts)       store.contacts = contacts;
+
+if (Array.isArray(chats)) {
+  store.chats = new Map(chats);
+} else {
+  store.chats = new Map();
+}
+
+if (Array.isArray(contacts)) {
+  store.contacts = new Map(contacts);
+} else {
+  store.contacts = new Map();
+}
 // @path: message/message.routes.js
 import { Router } from 'express';
 import { checkSession } from '../middlewares/checkSession.js';
@@ -374,6 +384,7 @@ import {
 } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
 import { store } from '../store/store.js';
+import { saveStore } from '../store/store.js';
 
 let cachedVersion = null;
 async function getBaileysVersion() {
@@ -394,14 +405,21 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-  store.bind(sock.ev);     
+
+  store.bind(sock.ev);
+
+  sock.ev.on('creds.update', () => saveStore(store));
+
+  sock.ev.on('chats.set',    () => saveStore(store));
+  sock.ev.on('chats.upsert', () => saveStore(store));
+  sock.ev.on('chats.update', () => saveStore(store));
+
   return sock;
 }
 // @path: client/session.manager.js
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
-import { store } from '../store/store.js';
-import { saveStore } from '../store/store.js';
+import { store, saveStore } from '../store/store.js';
 
 const sessions = new Map();
 
@@ -419,7 +437,12 @@ export async function initSession(id, force = false) {
   });
 
   store.bind(sock.ev);
+
   sock.ev.on('creds.update', () => saveStore(store));
+
+  sock.ev.on('chats.set',    () => saveStore(store));
+  sock.ev.on('chats.upsert', () => saveStore(store));
+  sock.ev.on('chats.update', () => saveStore(store));
 
   const entry = { sock, saveCreds };
   sessions.set(id, entry);
@@ -436,6 +459,7 @@ export async function deleteSession(id) {
   const entry = sessions.get(id);
   if (entry?.sock?.logout) await entry.sock.logout();
   sessions.delete(id);
+
   const dir = await import('path').then(p => p.resolve('.sessions', id));
   await import('fs').then(fs => {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
@@ -514,28 +538,12 @@ import { store, saveStore } from '../store/store.js';
 
 export async function getAllChats(sock) {
 
-  const chatMap = sock.store?.chats || store.chats;
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-
-    saveStore(store);
-  }
-
-  return [...chatMap.values()];
+  const all = sock.store?.chats?.all?.() ?? store.chats.all?.();
+  return all || [];
 }
 
 export async function getChatByJid(sock, jid) {
-  const chatMap = sock.store?.chats || store.chats;
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-    saveStore(store);
-  }
-
+  const chatMap = sock.store?.chats ?? store.chats;
   const chat = chatMap.get(jid);
   if (!chat) {
     const error = new Error('Chat not found');
@@ -543,16 +551,4 @@ export async function getChatByJid(sock, jid) {
     throw error;
   }
   return chat;
-}
-
-export async function getPinnedChats(sock) {
-  const chatMap = sock.store?.chats || store.chats;
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-    saveStore(store);
-  }
-
-  return [...chatMap.values()].filter(chat => chat.pinned);
 }

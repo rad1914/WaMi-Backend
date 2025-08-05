@@ -1,8 +1,7 @@
 // @path: client/session.manager.js
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
-import { store } from '../store/store.js';
-import { saveStore } from '../store/store.js';
+import { store, saveStore } from '../store/store.js';
 
 const sessions = new Map();
 
@@ -20,7 +19,12 @@ export async function initSession(id, force = false) {
   });
 
   store.bind(sock.ev);
+
   sock.ev.on('creds.update', () => saveStore(store));
+
+  sock.ev.on('chats.set',    () => saveStore(store));
+  sock.ev.on('chats.upsert', () => saveStore(store));
+  sock.ev.on('chats.update', () => saveStore(store));
 
   const entry = { sock, saveCreds };
   sessions.set(id, entry);
@@ -37,6 +41,7 @@ export async function deleteSession(id) {
   const entry = sessions.get(id);
   if (entry?.sock?.logout) await entry.sock.logout();
   sessions.delete(id);
+
   const dir = await import('path').then(p => p.resolve('.sessions', id));
   await import('fs').then(fs => {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });

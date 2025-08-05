@@ -2,32 +2,13 @@
 import { store, saveStore } from '../store/store.js';
 
 export async function getAllChats(sock) {
-  let chatMap = sock.store?.chats || store.chats;
 
-  if (!(chatMap instanceof Map)) {
-    console.warn('⚠️ chatMap no es un Map. Forzando nuevo Map');
-    chatMap = new Map();
-    sock.store.chats = chatMap;
-  }
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-    saveStore(store);
-  }
-
-  return [...chatMap.values()];
+  const all = sock.store?.chats?.all?.() ?? store.chats.all?.();
+  return all || [];
 }
 
 export async function getChatByJid(sock, jid) {
-  const chatMap = sock.store?.chats || store.chats;
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-    saveStore(store);
-  }
-
+  const chatMap = sock.store?.chats ?? store.chats;
   const chat = chatMap.get(jid);
   if (!chat) {
     const error = new Error('Chat not found');
@@ -35,16 +16,4 @@ export async function getChatByJid(sock, jid) {
     throw error;
   }
   return chat;
-}
-
-export async function getPinnedChats(sock) {
-  const chatMap = sock.store?.chats || store.chats;
-
-  if (chatMap.size === 0) {
-    const fetched = await sock.fetchChats();
-    fetched.forEach(chat => chatMap.set(chat.id, chat));
-    saveStore(store);
-  }
-
-  return [...chatMap.values()].filter(chat => chat.pinned);
 }
