@@ -5,10 +5,10 @@ import {
   Browsers
 } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
-import { store } from '../store/store.js';
-import { saveStore } from '../store/store.js';
+import { store, saveStore } from '../store/store.js';
 
 let cachedVersion = null;
+
 async function getBaileysVersion() {
   if (!cachedVersion) {
     const { version } = await fetchLatestBaileysVersion();
@@ -22,7 +22,7 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
     version: await getBaileysVersion(),
     auth: authState,
     browser: Browsers.macOS(browserName),
-    shouldSyncHistoryMessage: true,
+    shouldSyncHistoryMessage: () => true,
     printQRInTerminal: false
   });
 
@@ -30,9 +30,15 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
 
   store.bind(sock.ev);
 
-  sock.ev.on('creds.update', () => saveStore(store));
+  sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
+    store.chats.insertIfNotExists(...chats);
+    store.messages.insertIfNotExists(...messages);
+    store.contacts.insertIfNotExists(...contacts);
+    saveStore(store);
+  });
 
-  sock.ev.on('chats.set',    () => saveStore(store));
+  sock.ev.on('creds.update', () => saveStore(store));
+  sock.ev.on('chats.set', () => saveStore(store));
   sock.ev.on('chats.upsert', () => saveStore(store));
   sock.ev.on('chats.update', () => saveStore(store));
 

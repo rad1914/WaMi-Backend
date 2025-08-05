@@ -12,19 +12,11 @@ export async function initSession(id, force = false) {
 
   const { state, saveCreds } = await initAuthState(id);
   const sock = await createSocket({
-    authState:  { ...state, saveCreds },
-    sessionId:  id,
-    browserName:'MultiBaileys',
-    reinit:     () => initSession(id, true)
+    authState: { ...state, saveCreds },
+    sessionId: id,
+    browserName: 'MultiBaileys',
+    reinit: () => initSession(id, true)
   });
-
-  store.bind(sock.ev);
-
-  sock.ev.on('creds.update', () => saveStore(store));
-
-  sock.ev.on('chats.set',    () => saveStore(store));
-  sock.ev.on('chats.upsert', () => saveStore(store));
-  sock.ev.on('chats.update', () => saveStore(store));
 
   const entry = { sock, saveCreds };
   sessions.set(id, entry);
