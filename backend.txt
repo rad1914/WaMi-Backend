@@ -1,16 +1,4 @@
-
-// @path: middlewares/attachSession.js
-
-import { extractSock } from '../utils/session.js';
-
-export function attachSession(req, res, next) {
-  try {
-    req.sock = extractSock(req);
-    next();
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-}
+List redundant functions:
 // @path: middlewares/checkSession.js
 import { extractSock } from '../utils/session.js';
 
@@ -24,38 +12,29 @@ export function checkSession(req, res, next) {
       .json({ error: err.message });
   }
 }
-
 // @path: store/store.js
-
 import fs from 'fs';
 import { makeInMemoryStore } from '@whiskeysockets/baileys';
 import logger from '../utils/logger.js';
 import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js';
 
-function createSubStore() {
-  const data = new Map();
-  return {
-    upsert: obj => {
-      const id = obj?.id || obj?.jid || obj?.key?.id;
-      if (id) data.set(id, obj);
-    },
-    get: id => data.get(id),
-    all: () => Array.from(data.values())
-  };
+function loadStore() {
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      return JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not read store file:', e);
+  }
+  return {};
 }
 
-export const store = makeInMemoryStore({ logger });
-
-store.chats    = createSubStore();
-store.contacts = createSubStore();
-store.messages = createSubStore();
-
-export function saveStore() {
+export function saveStore(store) {
   try {
     const data = {
-      chats:    store.chats.all(),
-      contacts: store.contacts.all(),
-      messages: store.messages.all()
+      chats:    store.chats.all ? store.chats.all() : [],
+      contacts: store.contacts.all ? store.contacts.all() : [],
+      messages: store.messages.all ? store.messages.all() : []
     };
     if (!fs.existsSync(SESSION_BASE_DIR)) {
       fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
@@ -63,6 +42,58 @@ export function saveStore() {
     fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (e) {
     console.warn('⚠️ Error persisting store:', e);
+  }
+}
+
+export const store = makeInMemoryStore({ logger });
+
+store.messages = {
+  data: new Map(),
+  upsert(msg) {
+    const id = msg?.key?.id;
+    if (id) this.data.set(id, msg);
+  },
+  get(id) {
+    return this.data.get(id);
+  },
+  all() {
+    return Array.from(this.data.values());
+  }
+};
+
+store.contacts = {
+  data: new Map(),
+  upsert(contact) {
+    const id = contact?.id || contact?.jid;
+    if (id) this.data.set(id, contact);
+  },
+  get(id) {
+    return this.data.get(id);
+  },
+  all() {
+    return Array.from(this.data.values());
+  }
+};
+
+const loaded = loadStore();
+
+if (Array.isArray(loaded.chats)) {
+  for (const chat of loaded.chats) {
+    if (chat.id) {
+      store.chats.upsert(chat);
+    }
+  }
+}
+
+if (Array.isArray(loaded.contacts)) {
+  for (const contact of loaded.contacts) {
+    store.contacts.upsert(contact);
+  }
+}
+
+if (Array.isArray(loaded.messages)) {
+  for (const msg of loaded.messages) {
+    store.messages.upsert(msg);
   }
 }
 // @path: message/message.routes.js
@@ -224,10 +255,9 @@ export const reload = wrapController(
   },
   { input: 'body' }
 );
-
 // @path: index.js
-
 import fs from 'fs';
+import path from 'path';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -236,18 +266,17 @@ import routes from './routes.js';
 import { initClient } from './client/client.js';
 import { SESSION_BASE_DIR } from './config/config.js';
 
-dotenv.config();
-
 if (!fs.existsSync(SESSION_BASE_DIR)) {
   fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
   console.log(`📂 Created sessions directory at ${SESSION_BASE_DIR}`);
 }
 
+dotenv.config();
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(morgan('dev'));
-
 app.use('/api', routes);
 
 const PORT = process.env.PORT || 3000;
@@ -319,9 +348,7 @@ const logger = pino({
 })
 
 export default logger
-
 // @path: utils/session.js
-
 import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { getSession } from '../client/session.manager.js';
@@ -374,9 +401,7 @@ export function wrapController(fn, opts = {}) {
     }
   };
 }
-
 // @path: client/socketFactory.js
-
 import {
   makeWASocket,
   fetchLatestBaileysVersion,
@@ -404,25 +429,30 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-
   store.bind(sock.ev);
 
   sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
-    chats.forEach(chat    => store.chats.upsert(chat));
-    messages.forEach(msg   => store.messages.upsert(msg));
-    contacts.forEach(contact => store.contacts.upsert(contact));
-    saveStore();
+    for (const chat of chats) {
+      store.chats.upsert(chat);
+    }
+    for (const msg of messages) {
+
+      store.messages.upsert(msg);
+    }
+    for (const contact of contacts) {
+      store.contacts.upsert(contact);
+    }
+    saveStore(store);
   });
 
-  ['creds.update','chats.set','chats.upsert','chats.update'].forEach(evt =>
-    sock.ev.on(evt, () => saveStore())
-  );
+  sock.ev.on('creds.update', () => saveStore(store));
+  sock.ev.on('chats.set',      () => saveStore(store));
+  sock.ev.on('chats.upsert',   () => saveStore(store));
+  sock.ev.on('chats.update',   () => saveStore(store));
 
   return sock;
 }
-
 // @path: client/session.manager.js
-
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
 import { store, saveStore } from '../store/store.js';
@@ -528,7 +558,8 @@ export const getChatByJid = wrapController(async ({ jid }, req) =>
   service.getChatByJid(req.sock, jid)
 );
 
-export const getPinnedChats = wrapController((_, req) =>
+export 
+const getPinnedChats = wrapController((_, req) =>
   svc.getPinnedChats(req.sock)
 );
 // @path: chats/chats.service.js

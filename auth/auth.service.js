@@ -1,4 +1,3 @@
-// @path: auth/auth.service.js
 import { initSession, deleteSession, getSession } from '../client/session.manager.js';
 import { getPendingQR } from '../utils/helpers.js';
 import { randomUUID } from 'crypto';

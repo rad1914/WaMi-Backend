@@ -1,4 +1,3 @@
-// @path: middlewares/checkSession.js
 import { extractSock } from '../utils/session.js';
 
 export function checkSession(req, res, next) {

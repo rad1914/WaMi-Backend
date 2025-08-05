@@ -1,4 +1,3 @@
-// @path: auth/auth.controller.js
 import * as service from './auth.service.js';
 import { wrapController } from '../utils/utils.js';
 

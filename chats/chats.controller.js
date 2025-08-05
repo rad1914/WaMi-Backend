@@ -1,4 +1,3 @@
-// @path: chats/chats.controller.js
 import * as service from './chats.service.js';
 import { wrapController } from '../utils/utils.js';
 
@@ -8,4 +7,9 @@ export const getAllChats = wrapController(async (_input, req) =>
 
 export const getChatByJid = wrapController(async ({ jid }, req) =>
   service.getChatByJid(req.sock, jid)
+);
+
+export 
+const getPinnedChats = wrapController((_, req) =>
+  svc.getPinnedChats(req.sock)
 );

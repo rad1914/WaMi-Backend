@@ -1,5 +1,3 @@
-// @path: utils/utils.js
-
 export function wrapController(fn, opts = {}) {
   const extractor =
     opts.input === 'query'   ? req => req.query

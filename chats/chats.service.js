@@ -1,4 +1,3 @@
-// @path: chats/chats.service.js
 import { store, saveStore } from '../store/store.js';
 
 export async function getAllChats(sock) {

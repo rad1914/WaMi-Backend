@@ -1,6 +1,3 @@
-
-// @path: client/session.manager.js
-
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
 import { store, saveStore } from '../store/store.js';

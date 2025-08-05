@@ -1,5 +1,3 @@
-// @path: message/message.service.js
-
 const getPayload = (type, content, options) => ({
   text:     { text: content },
   image:    { image: { url: content } },

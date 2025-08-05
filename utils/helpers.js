@@ -1,4 +1,3 @@
-// @path: utils/helpers.js
 import { Boom } from '@hapi/boom';
 import { DisconnectReason } from '@whiskeysockets/baileys';
 import logger from './logger.js';
