@@ -17,21 +17,10 @@ import { makeInMemoryStore } from '@whiskeysockets/baileys';
 import logger from '../utils/logger.js';
 import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js';
 
-function entriesOf(maybeMapOrObj) {
-  if (maybeMapOrObj?.entries && typeof maybeMapOrObj.entries === 'function') {
-    return [...maybeMapOrObj.entries()];
-  }
-  if (maybeMapOrObj && typeof maybeMapOrObj === 'object') {
-    return Object.entries(maybeMapOrObj);
-  }
-  return [];
-}
-
 function loadStore() {
   try {
     if (fs.existsSync(STORE_FILE)) {
-      const data = fs.readFileSync(STORE_FILE, 'utf-8');
-      return JSON.parse(data);
+      return JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
     }
   } catch (e) {
     console.warn('⚠️ Could not read store file:', e);
@@ -42,14 +31,12 @@ function loadStore() {
 export function saveStore(store) {
   try {
     const data = {
-      chats:    entriesOf(store.chats),
-      contacts: entriesOf(store.contacts),
+      chats:    store.chats.all ? store.chats.all() : [],
+      contacts: store.contacts.all ? store.contacts.all() : [],
     };
-
     if (!fs.existsSync(SESSION_BASE_DIR)) {
       fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
     }
-
     fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (e) {
     console.warn('⚠️ Error persisting store:', e);
@@ -58,18 +45,22 @@ export function saveStore(store) {
 
 export const store = makeInMemoryStore({ logger });
 
-const { chats, contacts } = loadStore();
+const loaded = loadStore();
 
-if (Array.isArray(chats)) {
-  store.chats = new Map(chats);
-} else {
-  store.chats = new Map();
+if (Array.isArray(loaded.chats)) {
+  for (const chat of loaded.chats) {
+    if (chat.id) {
+      store.chats.upsert(chat);
+    }
+  }
 }
 
-if (Array.isArray(contacts)) {
-  store.contacts = new Map(contacts);
-} else {
-  store.contacts = new Map();
+if (Array.isArray(loaded.contacts)) {
+  for (const contact of loaded.contacts) {
+    if (contact.id) {
+      store.contacts.upsert(contact);
+    }
+  }
 }
 // @path: message/message.routes.js
 import { Router } from 'express';
@@ -386,7 +377,6 @@ import { registerSocketEvents } from '../utils/helpers.js';
 import { store, saveStore } from '../store/store.js';
 
 let cachedVersion = null;
-
 async function getBaileysVersion() {
   if (!cachedVersion) {
     const { version } = await fetchLatestBaileysVersion();
@@ -405,20 +395,26 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
-
   store.bind(sock.ev);
 
   sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
-    store.chats.insertIfNotExists(...chats);
-    store.messages.insertIfNotExists(...messages);
-    store.contacts.insertIfNotExists(...contacts);
+
+    for (const chat of chats) {
+      store.chats.upsert(chat);
+    }
+    for (const msg of messages) {
+      store.messages.upsert(msg);
+    }
+    for (const contact of contacts) {
+      store.contacts.upsert(contact);
+    }
     saveStore(store);
   });
 
   sock.ev.on('creds.update', () => saveStore(store));
-  sock.ev.on('chats.set', () => saveStore(store));
-  sock.ev.on('chats.upsert', () => saveStore(store));
-  sock.ev.on('chats.update', () => saveStore(store));
+  sock.ev.on('chats.set',      () => saveStore(store));
+  sock.ev.on('chats.upsert',   () => saveStore(store));
+  sock.ev.on('chats.update',   () => saveStore(store));
 
   return sock;
 }
