@@ -1,605 +1,629 @@
-<!-- @path: index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MultiBaileys Control Panel</title>
+    <title>Messaging Frontend</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"/>
     <style>
-        :root {
-            --primary-color: #007bff;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --border-radius: 0.375rem;
+        /* Custom scrollbar for webkit browsers */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
         }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f4f9;
-            color: var(--dark-color);
-            line-height: 1.5;
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
         }
-        .container {
-            max-width: 800px;
-            margin: auto;
-            background: white;
-            padding: 20px;
-            border-radius: var(--border-radius);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
         }
-        h1, h2 {
-            color: var(--primary-color);
-            border-bottom: 2px solid var(--primary-color);
-            padding-bottom: 10px;
-            margin-top: 0;
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-        }
-        @media (min-width: 768px) {
-            .grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        .card {
-            background: var(--light-color);
-            padding: 20px;
-            border-radius: var(--border-radius);
-            border: 1px solid #e3e3e3;
-            margin-top: 20px;
-        }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: bold;
-        }
-        input[type="text"], input[type="url"], select, textarea {
-            width: 100%;
-            padding: 0.5rem;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: var(--border-radius);
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
-        }
-        input:disabled {
-            background-color: #e9ecef;
-            cursor: not-allowed;
-        }
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.1s;
-            margin-right: 5px;
-            margin-top: 5px;
-            font-weight: 500;
-        }
-        button:hover:not(:disabled) {
-            background-color: #0056b3;
-            transform: translateY(-1px);
-        }
-        button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-        button:disabled {
-            background-color: #a0a0a0;
-            cursor: not-allowed;
-        }
-        button.danger { background-color: var(--danger-color); }
-        button.danger:hover:not(:disabled) { background-color: #c82333; }
-        button.success { background-color: var(--success-color); }
-        button.success:hover:not(:disabled) { background-color: #218838; }
-        button.secondary { background-color: var(--secondary-color); }
-        button.secondary:hover:not(:disabled) { background-color: #5a6268; }
-        #qr-display {
-            text-align: center;
-            margin-top: 15px;
-        }
-        #qr-code {
-            max-width: 250px;
-            border: 5px solid white;
-            border-radius: var(--border-radius);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        #response-container {
-            margin-top: 20px;
-            background-color: #272822;
-            color: #f8f8f2;
-            padding: 15px;
-            border-radius: var(--border-radius);
-            max-height: 400px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: 'Courier New', Courier, monospace;
-        }
-        .hidden-section {
-            display: none;
-        }
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
-        }
-        .modal-overlay.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-        .modal {
-            background: white;
-            padding: 25px;
-            border-radius: var(--border-radius);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            width: 90%;
-            max-width: 400px;
-            text-align: center;
-        }
-        .modal-buttons {
-            margin-top: 20px;
+        /* Basic transition for smoother UI changes */
+        .transition-all {
+            transition: all 0.3s ease-in-out;
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 font-sans">
 
-<div class="container">
-    <h1>MultiBaileys Control Panel</h1>
+    <div id="app" class="h-screen w-screen flex items-center justify-center">
 
-    <div class="card">
-        <h2>Authentication</h2>
-        <div class="form-group">
-            <label for="sessionIdInput">Session ID</label>
-            <input type="text" id="sessionIdInput" placeholder="Enter existing ID or create a new one">
-        </div>
-        <button id="createSessionBtn">Create New Session</button>
-        <button id="reloadSessionBtn" class="secondary">Use/Reload This Session</button>
-        <hr style="margin: 20px 0;">
-        <button id="getQrBtn" disabled>Get QR</button>
-        <button id="checkStatusBtn" class="secondary" disabled>Check Status</button>
-        <button id="removeSessionBtn" class="danger" disabled>Remove Session</button>
-        <div id="auth-status" style="margin-top: 15px; font-weight: 500;"></div>
-        <div id="qr-display"></div>
-    </div>
-
-    <div id="controls-section" class="hidden-section">
-        <div id="chats-section" class="card">
-            <h2>Chats</h2>
-            <div class="form-group">
-                <label for="chatJidInput">Chat JID (for 'Get by JID' action)</label>
-                <input type="text" id="chatJidInput" placeholder="e.g., 1234567890@s.whatsapp.net">
-            </div>
-            <button id="getAllChatsBtn">Get All Chats</button>
-            <button id="getPinnedChatsBtn">Get Pinned Chats</button>
-            <button id="getChatByJidBtn">Get by JID</button>
-        </div>
-
-        <div id="messaging-section" class="card">
-            <h2>Messaging</h2>
-            <div class="grid">
-                <div>
-                    <div class="form-group">
-                        <label for="jid">Recipient JID</label>
-                        <input type="text" id="jid" placeholder="e.g., 1234567890@s.whatsapp.net">
-                    </div>
-                    <div class="form-group">
-                        <label for="messageType">Message Type</label>
-                        <select id="messageType">
-                            <option value="text">Text</option>
-                            <option value="image">Image URL</option>
-                            <option value="video">Video URL</option>
-                            <option value="audio">Audio URL</option>
-                            <option value="document">Document URL</option>
-                            <option value="sticker">Sticker URL</option>
-                        </select>
-                    </div>
-                     <div class="form-group" id="url-group" style="display: none;">
-                        <label for="contentUrl">Content URL</label>
-                        <input type="url" id="contentUrl" placeholder="https://example.com/file.jpg">
-                     </div>
-                    <div class="form-group" id="fileName-group" style="display: none;">
-                        <label for="fileName">File Name (for Documents)</label>
-                        <input type="text" id="fileName" placeholder="e.g., report.pdf">
-                    </div>
+        <!-- Auth View -->
+        <div id="auth-view" class="w-full max-w-md p-8 bg-white rounded-2xl shadow-lg text-center">
+            <h1 class="text-3xl font-bold mb-4 text-gray-800">Welcome</h1>
+            <p class="text-gray-600 mb-6">Create a session to get started.</p>
+            <button id="create-session-btn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                Create Session
+            </button>
+            <div id="qr-container" class="mt-6 hidden">
+                <p class="text-gray-600 mb-4">Scan this QR code with your WhatsApp</p>
+                <div id="qr-code" class="w-64 h-64 mx-auto bg-gray-200 rounded-lg flex items-center justify-center">
+                    <span id="qr-spinner" class="fas fa-spinner fa-spin text-4xl text-gray-500"></span>
                 </div>
-                <div>
-                    <div class="form-group">
-                        <label for="messageId">Message ID (for Reply, Edit, React, Delete)</label>
-                        <input type="text" id="messageId" placeholder="The ID of the target message">
-                    </div>
-                    <div class="form-group">
-                        <label for="forwardJid">Forward to JID</label>
-                        <input type="text" id="forwardJid" placeholder="e.g., 0987654321@s.whatsapp.net">
-                    </div>
+                 <p id="auth-status" class="mt-4 text-sm text-gray-500"></p>
+            </div>
+             <div id="session-info" class="mt-4 text-xs text-gray-400"></div>
+        </div>
+
+        <!-- Main App View -->
+        <div id="main-view" class="hidden h-full w-full flex bg-white">
+            <!-- Left Panel: Chats List -->
+            <div class="w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 flex flex-col">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-800">Chats</h2>
+                     <button id="logout-btn" class="mt-2 text-sm text-red-500 hover:underline">Logout</button>
+                </div>
+                <div id="chats-list" class="flex-1 overflow-y-auto custom-scrollbar p-2">
+                    <!-- Chat items will be injected here -->
                 </div>
             </div>
-            <div class="form-group">
-                <label for="messageContent">Content</label>
-                <textarea id="messageContent" rows="3" placeholder="Type your message, emoji, or new text here..."></textarea>
+
+            <!-- Right Panel: Chat Window -->
+            <div id="chat-window" class="flex-1 flex-col hidden md:flex">
+                 <!-- Placeholder when no chat is selected -->
+                <div id="chat-placeholder" class="flex flex-col items-center justify-center h-full text-gray-500">
+                    <i class="fas fa-comments text-6xl mb-4"></i>
+                    <p class="text-xl">Select a chat to start messaging</p>
+                </div>
+
+                <!-- Actual chat content -->
+                <div id="chat-content" class="hidden flex-col h-full">
+                    <div class="p-4 border-b border-gray-200 flex items-center">
+                        <img id="chat-avatar" src="https://placehold.co/40x40/E2E8F0/A0AEC0?text=C" class="rounded-full mr-3">
+                        <div>
+                            <h3 id="chat-name" class="font-bold text-gray-800"></h3>
+                            <p id="chat-jid" class="text-xs text-gray-500"></p>
+                        </div>
+                    </div>
+                    <div id="messages-container" class="flex-1 p-4 overflow-y-auto custom-scrollbar bg-gray-50">
+                        <!-- Messages will be injected here -->
+                    </div>
+                     <!-- Reply Info Bar -->
+                    <div id="reply-info-bar" class="p-2 bg-gray-200 text-sm text-gray-700 border-t border-b border-gray-300 hidden">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <p class="font-bold">Replying to <span id="reply-to-name"></span></p>
+                                <p id="reply-to-text" class="truncate w-64"></p>
+                            </div>
+                            <button id="cancel-reply-btn" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-4 border-t border-gray-200">
+                        <div class="flex items-center bg-gray-100 rounded-lg p-2">
+                            <input id="message-input" type="text" placeholder="Type a message..." class="flex-1 bg-transparent border-none focus:ring-0 px-2">
+                            <button id="send-btn" class="bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center ml-2 hover:bg-blue-700">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="forwardMessageObject">Message Object to Forward (JSON)</label>
-                <textarea id="forwardMessageObject" rows="4" placeholder="Paste the full message JSON object here to forward it."></textarea>
-            </div>
-            <button id="sendBtn" class="success">Send</button>
-            <button id="replyBtn">Reply</button>
-            <button id="editBtn">Edit</button>
-            <button id="reactBtn">React</button>
-            <button id="forwardBtn">Forward</button>
-            <button id="deleteBtn" class="danger">Delete</button>
         </div>
     </div>
 
-    <h2>API Response</h2>
-    <pre id="response-container">Responses from the server will appear here...</pre>
-</div>
-
-<div id="custom-modal" class="modal-overlay">
-    <div class="modal">
-        <p id="modal-text"></p>
-        <div id="modal-buttons" class="modal-buttons">
-            <button id="modal-confirm-btn" class="success">Confirm</button>
-            <button id="modal-cancel-btn" class="secondary">Cancel</button>
+    <!-- Modal for other actions -->
+    <div id="action-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h3 id="modal-title" class="text-lg font-bold mb-4">Message Action</h3>
+            <div id="modal-content">
+                <!-- Content for edit, forward, etc. -->
+            </div>
+             <div class="mt-6 flex justify-end space-x-3">
+                <button id="modal-cancel-btn" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">Cancel</button>
+                <button id="modal-confirm-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm</button>
+            </div>
         </div>
     </div>
-</div>
+
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'http://192.168.1.68:3000/api';
+document.addEventListener('DOMContentLoaded', () => {
+    const API_BASE_URL = 'http://22.ip.gl.ply.gg:18880/api'; // Adjust if your backend runs elsewhere
 
-        // --- State ---
-        let currentSessionId = null;
+    // --- STATE ---
+    let sessionId = localStorage.getItem('sessionId');
+    let currentChatId = null;
+    let selectedMessageForAction = null;
+    let authCheckInterval = null;
+    let qrCheckInterval = null;
 
-        // --- DOM Elements ---
-        const sessionIdInput = document.getElementById('sessionIdInput');
-        const createSessionBtn = document.getElementById('createSessionBtn');
-        const reloadSessionBtn = document.getElementById('reloadSessionBtn');
-        const getQrBtn = document.getElementById('getQrBtn');
-        const checkStatusBtn = document.getElementById('checkStatusBtn');
-        const removeSessionBtn = document.getElementById('removeSessionBtn');
-        const authStatusDiv = document.getElementById('auth-status');
-        const qrDisplayDiv = document.getElementById('qr-display');
-        const responseContainer = document.getElementById('response-container');
-        const controlsSection = document.getElementById('controls-section');
+    // --- DOM ELEMENTS ---
+    const authView = document.getElementById('auth-view');
+    const mainView = document.getElementById('main-view');
+    const createSessionBtn = document.getElementById('create-session-btn');
+    const qrContainer = document.getElementById('qr-container');
+    const qrCodeDiv = document.getElementById('qr-code');
+    const qrSpinner = document.getElementById('qr-spinner');
+    const authStatus = document.getElementById('auth-status');
+    const sessionInfo = document.getElementById('session-info');
+    const logoutBtn = document.getElementById('logout-btn');
+    const chatsList = document.getElementById('chats-list');
+    const chatWindow = document.getElementById('chat-window');
+    const chatPlaceholder = document.getElementById('chat-placeholder');
+    const chatContent = document.getElementById('chat-content');
+    const chatName = document.getElementById('chat-name');
+    const chatJid = document.getElementById('chat-jid');
+    const messagesContainer = document.getElementById('messages-container');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const replyInfoBar = document.getElementById('reply-info-bar');
+    const replyToName = document.getElementById('reply-to-name');
+    const replyToText = document.getElementById('reply-to-text');
+    const cancelReplyBtn = document.getElementById('cancel-reply-btn');
 
-        // Chat Elements
-        const getAllChatsBtn = document.getElementById('getAllChatsBtn');
-        const getPinnedChatsBtn = document.getElementById('getPinnedChatsBtn');
-        const getChatByJidBtn = document.getElementById('getChatByJidBtn');
-        const chatJidInput = document.getElementById('chatJidInput');
+    // Modal elements
+    const actionModal = document.getElementById('action-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalContent = document.getElementById('modal-content');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
 
-        // Messaging Elements
-        const jidInput = document.getElementById('jid');
-        const messageIdInput = document.getElementById('messageId');
-        const messageTypeSelect = document.getElementById('messageType');
-        const messageContentInput = document.getElementById('messageContent');
-        const contentUrlInput = document.getElementById('contentUrl');
-        const urlGroup = document.getElementById('url-group');
-        const fileNameInput = document.getElementById('fileName');
-        const fileNameGroup = document.getElementById('fileName-group');
-        const sendBtn = document.getElementById('sendBtn');
-        const replyBtn = document.getElementById('replyBtn');
-        const editBtn = document.getElementById('editBtn');
-        const reactBtn = document.getElementById('reactBtn');
-        const deleteBtn = document.getElementById('deleteBtn');
-        const forwardBtn = document.getElementById('forwardBtn');
-        const forwardJidInput = document.getElementById('forwardJid');
-        const forwardMessageObjectInput = document.getElementById('forwardMessageObject');
 
-        // Modal Elements
-        const modal = document.getElementById('custom-modal');
-        const modalText = document.getElementById('modal-text');
-        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
-        const modalCancelBtn = document.getElementById('modal-cancel-btn');
-
-        // --- Modal Functions ---
-        function showAlert(message) {
-            modalText.textContent = message;
-            modalConfirmBtn.style.display = 'none';
-            modalCancelBtn.textContent = 'Close';
-            modal.classList.add('visible');
-            return new Promise(resolve => {
-                modalCancelBtn.onclick = () => {
-                    modal.classList.remove('visible');
-                    resolve(false); // Consistent return
-                };
-            });
-        }
-
-        function showConfirm(message) {
-            modalText.textContent = message;
-            modalConfirmBtn.style.display = 'inline-block';
-            modalCancelBtn.textContent = 'Cancel';
-            modal.classList.add('visible');
-            return new Promise(resolve => {
-                modalConfirmBtn.onclick = () => {
-                    modal.classList.remove('visible');
-                    resolve(true);
-                };
-                modalCancelBtn.onclick = () => {
-                    modal.classList.remove('visible');
-                    resolve(false);
-                };
-            });
-        }
-
-        // --- UI Update Functions ---
-        function setSessionActive(sessionId) {
-            currentSessionId = sessionId;
-            sessionIdInput.value = sessionId;
-            getQrBtn.disabled = false;
-            checkStatusBtn.disabled = false;
-            removeSessionBtn.disabled = false;
-            controlsSection.style.display = 'block';
-            authStatusDiv.innerHTML = '';
-            qrDisplayDiv.innerHTML = '';
-        }
-
-        function setSessionInactive() {
-            setAuthStatus(`Session '${currentSessionId}' removed or deactivated.`, 'success');
-            currentSessionId = null;
-            sessionIdInput.value = '';
-            sessionIdInput.placeholder = "Enter existing ID or create a new one";
-            getQrBtn.disabled = true;
-            checkStatusBtn.disabled = true;
-            removeSessionBtn.disabled = true;
-            controlsSection.style.display = 'none';
-            qrDisplayDiv.innerHTML = '';
-        }
-
-        // --- API & Helper Functions ---
-        async function fetchApi(endpoint, options = {}) {
-            const isCreatingSession = endpoint.includes('/auth/create');
-            if (!currentSessionId && !isCreatingSession) {
-                showAlert('Please create or reload a session first.');
-                return;
+    // --- API HELPER ---
+    const api = {
+        async request(endpoint, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (sessionId) {
+                headers['x-session-id'] = sessionId;
             }
-
-            let url = `${API_BASE_URL}${endpoint}`;
-            const headers = { 'Content-Type': 'application/json', ...options.headers };
-
-            if (currentSessionId && (endpoint.startsWith('/message') || endpoint.startsWith('/chats'))) {
-                headers['x-session-id'] = currentSessionId;
+            const options = {
+                method,
+                headers,
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
             }
-
-            if (currentSessionId && (options.method === 'GET' || !options.method) && endpoint.startsWith('/auth')) {
-                const params = new URLSearchParams({ sessionId: currentSessionId });
-                url += `?${params}`;
-            }
-
             try {
-                const response = await fetch(url, { ...options, headers });
-                const result = await response.json();
-                displayResponse(result);
-                return result;
+                const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+                // Handle responses with no content
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    return response.json();
+                }
+                return {};
+
             } catch (error) {
-                const errorResponse = { error: 'Network or server error', message: error.message };
-                displayResponse(errorResponse);
-                showAlert(`Error: ${error.message}`);
+                console.error(`API Error on ${method} ${endpoint}:`, error);
+                alert(`API Error: ${error.message}`);
+                throw error;
             }
+        },
+        auth: {
+            create: () => api.request('/auth/create', 'POST'),
+            remove: () => api.request('/auth/remove', 'DELETE', { sessionId }),
+            qr: () => api.request(`/auth/qr?sessionId=${sessionId}`),
+            status: () => api.request(`/auth/status?sessionId=${sessionId}`),
+        },
+        chats: {
+            getAll: () => api.request('/chats'),
+            // The backend doesn't have a get by JID, we'll filter from all chats.
+        },
+        message: {
+            send: (jid, content) => api.request('/message/send', 'POST', { jid, type: 'text', content }),
+            reply: (jid, content, quotedMessageId) => api.request('/message/reply', 'POST', { jid, content, quotedMessageId }),
+            react: (jid, messageId, emoji) => api.request('/message/react', 'POST', { jid, messageId, emoji }),
+            delete: (jid, messageId) => api.request('/message/delete', 'POST', { jid, messageId }),
+            edit: (jid, messageId, newText) => api.request('/message/edit', 'POST', { jid, messageId, newText }),
         }
+    };
 
-        function displayResponse(data) {
-            responseContainer.textContent = JSON.stringify(data, null, 2);
-        }
-
-        function setAuthStatus(message, type) {
-            authStatusDiv.textContent = message;
-            authStatusDiv.style.color = type === 'success' ? 'var(--success-color)' : 'var(--danger-color)';
-            authStatusDiv.style.marginTop = '15px';
-        }
-
-        // --- Event Listeners ---
-        messageTypeSelect.addEventListener('change', () => {
-            const selectedType = messageTypeSelect.value;
-            const isUrlType = ['image', 'video', 'audio', 'document', 'sticker'].includes(selectedType);
-            urlGroup.style.display = isUrlType ? 'block' : 'none';
-            fileNameGroup.style.display = selectedType === 'document' ? 'block' : 'none';
-        });
-
-        // Authentication Actions
-        createSessionBtn.addEventListener('click', async () => {
-            const result = await fetchApi('/auth/create', { method: 'POST', body: JSON.stringify({}) });
-            if (result && result.sessionId) {
-                setSessionActive(result.sessionId);
-                setAuthStatus(`Session '${result.sessionId}' created. Click 'Get QR' to authenticate.`, 'success');
-            } else {
-                setAuthStatus(`Failed to create session: ${result?.message || 'Unknown error'}`, 'danger');
-            }
-        });
-
-        reloadSessionBtn.addEventListener('click', async () => {
-            const sessionId = sessionIdInput.value.trim();
-            if (!sessionId) {
-                showAlert('Please enter a Session ID to reload.');
+    // --- UI RENDERING ---
+    const render = {
+        showAuthView() {
+            authView.classList.remove('hidden');
+            mainView.classList.add('hidden');
+        },
+        showMainView() {
+            authView.classList.add('hidden');
+            mainView.classList.remove('hidden');
+            mainView.classList.add('flex');
+        },
+        showQRCode(qrString) {
+            qrSpinner.classList.add('hidden');
+            qrCodeDiv.innerHTML = ''; // Clear previous QR
+            // Basic QR code generation using a library would be better, but for simplicity, we'll use a service.
+            const img = document.createElement('img');
+            // Using a public API to generate QR code from string
+            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrString)}`;
+            qrCodeDiv.appendChild(img);
+        },
+        renderChats(chats) {
+            chatsList.innerHTML = '';
+            if (!chats || chats.length === 0) {
+                chatsList.innerHTML = '<p class="text-center text-gray-500 p-4">No chats found.</p>';
                 return;
             }
-            const body = { sessionId };
-            const result = await fetchApi('/auth/reload', { method: 'POST', body: JSON.stringify(body) });
-            if (result && result.reloaded) {
-                setSessionActive(sessionId);
-                setAuthStatus(`Successfully reloaded session '${sessionId}'.`, 'success');
-            } else {
-                setAuthStatus(`Failed to reload session: ${result?.message || 'Unknown error'}`, 'danger');
+            chats.sort((a, b) => (b.conversationTimestamp || 0) - (a.conversationTimestamp || 0));
+            chats.forEach(chat => {
+                const chatElement = document.createElement('div');
+                chatElement.className = `flex items-center p-3 hover:bg-gray-100 rounded-lg cursor-pointer transition-all ${chat.id === currentChatId ? 'bg-blue-100' : ''}`;
+                chatElement.dataset.jid = chat.id;
+
+                const unreadCount = chat.unreadCount > 0 ? `<span class="bg-green-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">${chat.unreadCount}</span>` : '';
+
+                chatElement.innerHTML = `
+                    <img src="https://placehold.co/48x48/E2E8F0/A0AEC0?text=${(chat.name || 'U').charAt(0).toUpperCase()}" class="rounded-full mr-3 w-12 h-12">
+                    <div class="flex-1 overflow-hidden">
+                        <div class="flex justify-between items-center">
+                            <h4 class="font-semibold text-gray-800 truncate">${chat.name || chat.id}</h4>
+                            <span class="text-xs text-gray-500">${new Date((chat.conversationTimestamp || 0) * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <p class="text-sm text-gray-600 truncate">${chat.lastMessage?.text || 'No messages yet'}</p>
+                            ${unreadCount}
+                        </div>
+                    </div>
+                `;
+                chatElement.addEventListener('click', () => handleSelectChat(chat.id));
+                chatsList.appendChild(chatElement);
+            });
+        },
+        renderMessages(messages) {
+            messagesContainer.innerHTML = '';
+            if (!messages || messages.length === 0) {
+                messagesContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No messages in this chat.</p>';
+                return;
             }
+            messages.sort((a,b) => (a.messageTimestamp || 0) - (b.messageTimestamp || 0));
+            messages.forEach(msg => {
+                if (!msg.key || !msg.message) return; // Skip invalid messages
+
+                const fromMe = msg.key.fromMe;
+                const messageWrapper = document.createElement('div');
+                messageWrapper.className = `flex mb-3 ${fromMe ? 'justify-end' : 'justify-start'}`;
+
+                const text = msg.message.extendedTextMessage?.text || msg.message.conversation || 'Unsupported message type';
+                
+                let reactionText = '';
+                if(msg.reactions && msg.reactions.length > 0) {
+                    reactionText = `<div class="text-xs ${fromMe ? 'mr-2' : 'ml-2'}">${msg.reactions.map(r => r.text).join('')}</div>`;
+                }
+
+                messageWrapper.innerHTML = `
+                    <div class="max-w-xs lg:max-w-md">
+                         <div class="px-4 py-2 rounded-2xl ${fromMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none shadow'}">
+                            <p>${text}</p>
+                            <div class="text-xs mt-1 ${fromMe ? 'text-blue-200' : 'text-gray-400'} text-right">
+                                ${new Date(msg.messageTimestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </div>
+                        </div>
+                        ${reactionText}
+                    </div>
+                `;
+                
+                // Add context menu for actions
+                const msgDiv = messageWrapper.querySelector('div > div');
+                msgDiv.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    showContextMenu(e, msg);
+                });
+
+
+                messagesContainer.appendChild(messageWrapper);
+            });
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        },
+        showModal(title, contentHtml, onConfirm) {
+            modalTitle.textContent = title;
+            modalContent.innerHTML = contentHtml;
+            actionModal.classList.remove('hidden');
+            actionModal.classList.add('flex');
+
+            modalConfirmBtn.onclick = () => {
+                if (onConfirm()) {
+                    this.hideModal();
+                }
+            };
+        },
+        hideModal() {
+            actionModal.classList.add('hidden');
+            actionModal.classList.remove('flex');
+            modalConfirmBtn.onclick = null;
+        }
+    };
+
+    // --- EVENT HANDLERS & LOGIC ---
+    const handleCreateSession = async () => {
+        try {
+            createSessionBtn.disabled = true;
+            createSessionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            const data = await api.auth.create();
+            sessionId = data.sessionId;
+            localStorage.setItem('sessionId', sessionId);
+            sessionInfo.textContent = `Session ID: ${sessionId}`;
+            qrContainer.classList.remove('hidden');
+            createSessionBtn.classList.add('hidden');
+            startPolling();
+        } catch (error) {
+            alert('Failed to create session.');
+        } finally {
+            createSessionBtn.disabled = false;
+            createSessionBtn.innerHTML = 'Create Session';
+        }
+    };
+
+    const handleLogout = async () => {
+        if (!confirm('Are you sure you want to logout? This will delete the session.')) return;
+        try {
+            await api.auth.remove();
+        } catch (error) {
+            console.error("Logout failed, but clearing session locally anyway.", error);
+        } finally {
+            localStorage.removeItem('sessionId');
+            sessionId = null;
+            stopPolling();
+            currentChatId = null;
+            render.showAuthView();
+            // Reset UI
+            qrContainer.classList.add('hidden');
+            qrCodeDiv.innerHTML = `<span id="qr-spinner" class="fas fa-spinner fa-spin text-4xl text-gray-500"></span>`;
+            qrSpinner.classList.remove('hidden');
+            createSessionBtn.classList.remove('hidden');
+            sessionInfo.textContent = '';
+        }
+    };
+
+    const handleSelectChat = async (jid) => {
+        currentChatId = jid;
+        chatPlaceholder.classList.add('hidden');
+        chatContent.classList.remove('hidden');
+        chatContent.classList.add('flex');
+
+        try {
+            // In a real app, you'd fetch chat details and messages
+            // Here, we simulate it by getting all chats and filtering
+            const allChats = await api.chats.getAll();
+            const chat = allChats.find(c => c.id === jid);
+            const allMessages = chat.messages || []; // Assuming messages are nested in chat object from backend
+
+            if (chat) {
+                chatName.textContent = chat.name || chat.id;
+                chatJid.textContent = chat.id;
+            }
+            render.renderChats(allChats); // Re-render to highlight selection
+            render.renderMessages(allMessages);
+        } catch (error) {
+            alert(`Failed to load chat: ${error.message}`);
+        }
+    };
+
+    const handleSendMessage = async () => {
+        const content = messageInput.value.trim();
+        if (!content || !currentChatId) return;
+
+        try {
+            messageInput.value = '';
+            if (selectedMessageForAction) { // It's a reply
+                await api.message.reply(currentChatId, content, selectedMessageForAction.key.id);
+                clearReply();
+            } else { // It's a new message
+                await api.message.send(currentChatId, content);
+            }
+            // Optimistically update UI or re-fetch
+            setTimeout(() => handleSelectChat(currentChatId), 500); // Re-fetch after a short delay
+        } catch (error) {
+            alert(`Failed to send message: ${error.message}`);
+            messageInput.value = content; // Restore input on failure
+        }
+    };
+
+    const showContextMenu = (event, message) => {
+        // Remove existing context menu if any
+        const existingMenu = document.getElementById('context-menu');
+        if (existingMenu) existingMenu.remove();
+
+        selectedMessageForAction = message;
+
+        const menu = document.createElement('div');
+        menu.id = 'context-menu';
+        menu.className = 'absolute bg-white rounded-md shadow-lg py-1 z-10';
+        menu.style.left = `${event.pageX}px`;
+        menu.style.top = `${event.pageY}px`;
+
+        const actions = [
+            { label: 'Reply', icon: 'fa-reply', handler: handleReply },
+            { label: 'React', icon: 'fa-smile', handler: handleReact },
+            { label: 'Edit', icon: 'fa-edit', handler: handleEdit, condition: message.key.fromMe },
+            { label: 'Delete', icon: 'fa-trash', handler: handleDelete, condition: message.key.fromMe },
+        ];
+
+        actions.forEach(action => {
+            if (action.condition === false) return; // Skip if condition not met
+            const item = document.createElement('button');
+            item.className = 'flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100';
+            item.innerHTML = `<i class="fas ${action.icon} mr-3"></i> ${action.label}`;
+            item.onclick = () => {
+                action.handler();
+                menu.remove();
+            };
+            menu.appendChild(item);
         });
 
-        getQrBtn.addEventListener('click', async () => {
-            qrDisplayDiv.innerHTML = 'Requesting QR Code...';
-            const result = await fetchApi('/auth/qr', { method: 'GET' });
-            if (result) {
-                if (result.qr) {
-                    qrDisplayDiv.innerHTML = `<img id="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.qr)}" alt="QR Code">`;
-                    setAuthStatus('Scan the QR code with WhatsApp.', 'success');
-                } else if (result.authenticated === true || result.success === true) {
-                    qrDisplayDiv.innerHTML = '';
-                    setAuthStatus('Session is already connected!', 'success');
-                } else {
-                     qrDisplayDiv.innerHTML = `Failed to get QR code. ${result.message || ''}`;
+        document.body.appendChild(menu);
+
+        // Close menu when clicking elsewhere
+        const closeListener = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeListener);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeListener), 0);
+    };
+    
+    // --- ACTION HANDLERS ---
+    const handleReply = () => {
+        if (!selectedMessageForAction) return;
+        replyInfoBar.classList.remove('hidden');
+        replyToName.textContent = selectedMessageForAction.key.fromMe ? 'You' : (chatName.textContent || 'User');
+        replyToText.textContent = selectedMessageForAction.message.conversation || selectedMessageForAction.message.extendedTextMessage?.text || '...';
+        messageInput.focus();
+    };
+
+    const clearReply = () => {
+        replyInfoBar.classList.add('hidden');
+        selectedMessageForAction = null;
+    };
+
+
+    const handleReact = () => {
+        const emojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+        const contentHtml = `<p>Select an emoji to react:</p><div class="flex justify-around mt-4 text-2xl">${emojis.map(e => `<button class="emoji-btn hover:scale-125 transition-transform" data-emoji="${e}">${e}</button>`).join('')}</div>`;
+
+        render.showModal('React to message', contentHtml, () => false); // No confirm button needed
+
+        document.querySelectorAll('.emoji-btn').forEach(btn => {
+            btn.onclick = async () => {
+                const emoji = btn.dataset.emoji;
+                try {
+                    await api.message.react(currentChatId, selectedMessageForAction.key.id, emoji);
+                    setTimeout(() => handleSelectChat(currentChatId), 500);
+                } catch (error) {
+                    alert(`Failed to react: ${error.message}`);
+                }
+                render.hideModal();
+            };
+        });
+    };
+
+    const handleEdit = () => {
+        const currentText = selectedMessageForAction.message.extendedTextMessage?.text || selectedMessageForAction.message.conversation;
+        const contentHtml = `<label for="edit-input" class="block text-sm font-medium text-gray-700">Edit your message:</label>
+                             <textarea id="edit-input" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" rows="4">${currentText}</textarea>`;
+
+        render.showModal('Edit Message', contentHtml, async () => {
+            const newText = document.getElementById('edit-input').value;
+            if (newText && newText !== currentText) {
+                try {
+                    await api.message.edit(currentChatId, selectedMessageForAction.key.id, newText);
+                    setTimeout(() => handleSelectChat(currentChatId), 500);
+                    return true;
+                } catch (error) {
+                    alert(`Failed to edit: ${error.message}`);
+                    return false;
                 }
             }
+            return true; // Close modal even if no change
         });
+    };
 
-        checkStatusBtn.addEventListener('click', async () => {
-            const result = await fetchApi('/auth/status', { method: 'GET' });
-            if (result) {
-                const statusMessage = result.authenticated ? 'Session is authenticated.' : 'Session is not authenticated.';
-                const statusType = result.authenticated ? 'success' : 'danger';
-                setAuthStatus(statusMessage, statusType);
-            }
-        });
-
-        removeSessionBtn.addEventListener('click', async () => {
-             const confirmed = await showConfirm('Are you sure you want to remove this session? This action cannot be undone.');
-             if (!confirmed) return;
-
-             const body = { sessionId: currentSessionId };
-             const result = await fetchApi('/auth/remove', {
-                 method: 'DELETE',
-                 body: JSON.stringify(body)
-             });
-             if (result && result.success) {
-                setSessionInactive();
-             } else {
-                showAlert(`Failed to remove session: ${result?.message || 'Unknown error'}`);
-             }
-        });
-
-        // Chat Actions
-        getAllChatsBtn.addEventListener('click', () => fetchApi('/chats/', { method: 'GET' }));
-        getPinnedChatsBtn.addEventListener('click', () => fetchApi('/chats/pinned', { method: 'GET' }));
-        getChatByJidBtn.addEventListener('click', () => {
-            const jid = chatJidInput.value.trim();
-            if (!jid) {
-                showAlert('Please enter a JID to get the chat.');
-                return;
-            }
-            fetchApi(`/chats/${jid}`, { method: 'GET' });
-        });
-
-        // Messaging Actions
-        sendBtn.addEventListener('click', () => {
-            const type = messageTypeSelect.value;
-            const isUrlBased = ['image', 'video', 'audio', 'document', 'sticker'].includes(type);
-            const content = isUrlBased ? contentUrlInput.value.trim() : messageContentInput.value;
-            const jid = jidInput.value.trim();
-
-            if (!jid || !content) {
-                showAlert('Recipient JID and content cannot be empty.');
-                return;
-            }
-
-            const options = {};
-            if (type === 'document' && fileNameInput.value) {
-                options.fileName = fileNameInput.value.trim();
-            }
-            
-            const body = { jid, type, content, options };
-            fetchApi('/message/send', { method: 'POST', body: JSON.stringify(body) });
-        });
-
-        replyBtn.addEventListener('click', () => {
-            const jid = jidInput.value.trim();
-            const content = messageContentInput.value;
-            const quotedMessageId = messageIdInput.value.trim();
-
-            if (!jid || !content || !quotedMessageId) {
-                showAlert('JID, message content, and quoted message ID are required for a reply.');
-                return;
-            }
-
-            const body = { jid, content, quotedMessageId, type: 'text' };
-            fetchApi('/message/reply', { method: 'POST', body: JSON.stringify(body) });
-        });
-
-        editBtn.addEventListener('click', () => {
-            const jid = jidInput.value.trim();
-            const messageId = messageIdInput.value.trim();
-            const newText = messageContentInput.value;
-
-            if (!jid || !messageId || !newText) {
-                showAlert('JID, message ID, and new text are required to edit.');
-                return;
-            }
-
-            const body = { jid, messageId, newText };
-            fetchApi('/message/edit', { method: 'POST', body: JSON.stringify(body) });
-        });
-
-        reactBtn.addEventListener('click', () => {
-            const jid = jidInput.value.trim();
-            const messageId = messageIdInput.value.trim();
-            const emoji = messageContentInput.value.trim();
-
-            if (!jid || !messageId || !emoji) {
-                showAlert('JID, message ID, and an emoji are required to react.');
-                return;
-            }
-
-            const body = { jid, messageId, emoji };
-            fetchApi('/message/react', { method: 'POST', body: JSON.stringify(body) });
-        });
-
-        deleteBtn.addEventListener('click', () => {
-            const jid = jidInput.value.trim();
-            const messageId = messageIdInput.value.trim();
-
-            if (!jid || !messageId) {
-                showAlert('JID and message ID are required to delete a message.');
-                return;
-            }
-
-            const body = { jid, messageId };
-            fetchApi('/message/delete', { method: 'POST', body: JSON.stringify(body) });
-        });
-
-        forwardBtn.addEventListener('click', () => {
-            let messageObject;
-            const forwardJid = forwardJidInput.value.trim();
-            
-            if (!forwardJid) {
-                showAlert('A "Forward to JID" is required.');
-                return;
-            }
-
+    const handleDelete = () => {
+        render.showModal('Delete Message', '<p>Are you sure you want to delete this message? This cannot be undone.</p>', async () => {
             try {
-                messageObject = JSON.parse(forwardMessageObjectInput.value);
-            } catch (e) {
-                showAlert('Invalid JSON in "Message Object to Forward" field.');
-                return;
+                await api.message.delete(currentChatId, selectedMessageForAction.key.id);
+                setTimeout(() => handleSelectChat(currentChatId), 500);
+                return true;
+            } catch (error) {
+                alert(`Failed to delete: ${error.message}`);
+                return false;
             }
-
-            const body = { to: forwardJid, message: messageObject };
-            fetchApi('/message/forward', { method: 'POST', body: JSON.stringify(body) });
         });
-    });
+    };
+
+    // --- POLLING LOGIC ---
+    const pollQR = async () => {
+        try {
+            const data = await api.auth.qr();
+            if (data.qr) {
+                render.showQRCode(data.qr);
+                authStatus.textContent = 'QR code ready. Please scan.';
+                clearInterval(qrCheckInterval); // Stop polling for QR once we have it
+                qrCheckInterval = null;
+            } else if (data.success) {
+                // This means we are already logged in
+                await pollAuthStatus();
+            } else {
+                 authStatus.textContent = 'Waiting for QR code...';
+            }
+        } catch (error) {
+            authStatus.textContent = `Error fetching QR: ${error.message}`;
+            console.error("QR Poll Error:", error);
+        }
+    };
+
+    const pollAuthStatus = async () => {
+        try {
+            const data = await api.auth.status();
+            if (data.authenticated) {
+                authStatus.textContent = 'Authenticated! Loading chats...';
+                stopPolling();
+                await loadMainApp();
+            } else {
+                authStatus.textContent = 'Not authenticated. Please scan the QR code.';
+                if (!qrCheckInterval) { // If QR polling stopped, restart it
+                    qrCheckInterval = setInterval(pollQR, 5000);
+                    pollQR();
+                }
+            }
+        } catch (error) {
+            authStatus.textContent = `Authentication check failed.`;
+            console.error("Auth Poll Error:", error);
+            stopPolling();
+            handleLogout(); // Force logout on critical auth error
+        }
+    };
+
+    const startPolling = () => {
+        stopPolling(); // Ensure no multiple intervals running
+        authCheckInterval = setInterval(pollAuthStatus, 3000);
+        qrCheckInterval = setInterval(pollQR, 5000);
+        pollQR(); // Initial call
+        pollAuthStatus(); // Initial call
+    };
+
+    const stopPolling = () => {
+        if (authCheckInterval) clearInterval(authCheckInterval);
+        if (qrCheckInterval) clearInterval(qrCheckInterval);
+        authCheckInterval = null;
+        qrCheckInterval = null;
+    };
+
+    // --- INITIALIZATION ---
+    const loadMainApp = async () => {
+        render.showMainView();
+        try {
+            const chats = await api.chats.getAll();
+            render.renderChats(chats);
+        } catch (error) {
+            alert('Could not load chats.');
+        }
+    };
+
+    const initialize = () => {
+        if (sessionId) {
+            sessionInfo.textContent = `Session ID: ${sessionId}`;
+            qrContainer.classList.remove('hidden');
+            createSessionBtn.classList.add('hidden');
+            startPolling();
+        } else {
+            render.showAuthView();
+        }
+
+        // Event Listeners
+        createSessionBtn.addEventListener('click', handleCreateSession);
+        logoutBtn.addEventListener('click', handleLogout);
+        sendBtn.addEventListener('click', handleSendMessage);
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+        modalCancelBtn.addEventListener('click', render.hideModal);
+        cancelReplyBtn.addEventListener('click', clearReply);
+    };
+
+    initialize();
+});
 </script>
 
 </body>

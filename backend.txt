@@ -168,73 +168,45 @@ export const reload = wrapController(
 );
 // @path: index.js
 import fs from 'fs';
-import path from 'path';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import morgan from 'morgan';
 import routes from './routes.js';
 import { initClient } from './client/client.js';
 import { SESSION_BASE_DIR } from './config/config.js';
 
-if (!fs.existsSync(SESSION_BASE_DIR)) {
-  fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
-
-  try {
-
-  } catch (err) {
-    console.error(`❌ Error creando sesiones: ${err.message}`);
-  }
-}
-
 dotenv.config();
+fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
-app.use(morgan('common'));
 app.use('/api', routes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
-  console.log(`✅ API corriendo en http://localhost:${PORT}/api`);
-  try {
-    await initClient();
-  } catch (err) {
-    console.error(`❌ Error inicializando cliente: ${err.message}`);
-  }
+  console.log(`✅ API running on http://localhost:${PORT}/api`);
+  try { await initClient(); } 
+  catch (err) { console.error(`❌ Client init error: ${err.message}`); }
 });
 // @path: utils/helpers.js
-import { Boom } from '@hapi/boom';
-import { DisconnectReason } from '@whiskeysockets/baileys';
-import logger from './logger.js';
+import { Boom } from '@hapi/boom'
+import { DisconnectReason } from '@whiskeysockets/baileys'
+import logger from './logger.js'
 
-const pendingQRs = new Map();
-export const getPendingQR = id => pendingQRs.get(id) || null;
+const pendingQRs = new Map()
+export const getPendingQR = id => pendingQRs.get(id) || null
 
 export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-    if (connection === 'close') {
-      const err = lastDisconnect?.error;
-      const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
-      logger.warn(`❌ [${id}] desconectado (${err?.message}). Reconnect=${reconnect}`);
-      try {
-        await saveCreds();
-      } catch (e) {
-        logger.error(`🔒 [${id}] fallo al guardar credenciales: ${e.message}`);
-      }
-      if (reconnect && typeof reinit === 'function') {
-        try {
-          await reinit(id);
-        } catch (e) {
-          logger.error(`❌ [${id}] reinit falló: ${e.message}`);
-        }
-      }
-    }
-
-  });
-};
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+    if (connection !== 'close') return
+    const err = lastDisconnect?.error
+    const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut)
+    logger.warn(`❌ [${id}] desconectado (${err?.message}). Reconnect=${reconnect}`)
+    try { await saveCreds() } catch (e) { logger.error(`🔒 [${id}] fallo al guardar credenciales: ${e.message}`) }
+    if (reconnect) try { await reinit?.(id) } catch (e) { logger.error(`❌ [${id}] reinit falló: ${e.message}`) }
+  })
+}
 // @path: utils/logger.js
 import pino from 'pino';
 
@@ -412,55 +384,41 @@ loaded.chats?.forEach(c => c.id && store.chats.upsert(c))
 loaded.contacts?.forEach(store.contacts.upsert)
 loaded.messages?.forEach(store.messages.upsert)
 // @path: client/client.js
-import fs from 'fs';
-import path from 'path';
-import logger from '../utils/logger.js';
-import { initSession } from './session.manager.js';
-import { SESSION_BASE_DIR } from '../config/config.js';
+import fs from 'fs'
+import path from 'path'
+import logger from '../utils/logger.js'
+import { initSession } from './session.manager.js'
+import { SESSION_BASE_DIR } from '../config/config.js'
 
-function deleteEmptyDirs(dir) {
-  if (!fs.existsSync(dir)) return;
+const deleteEmptyDirs = dir => {
+  if (!fs.existsSync(dir)) return
   for (const entry of fs.readdirSync(dir)) {
-    const fullPath = path.join(dir, entry);
-    if (fs.statSync(fullPath).isDirectory()) {
-      deleteEmptyDirs(fullPath);
-    }
+    const fullPath = path.join(dir, entry)
+    if (fs.statSync(fullPath).isDirectory()) deleteEmptyDirs(fullPath)
   }
-  const contents = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
-  const onlyCreds = contents.length === 1 && contents[0] === 'creds.json';
-  if (contents.length === 0 || onlyCreds) {
-    fs.rmSync(dir, { recursive: true, force: true });
-
-  }
+  const files = fs.readdirSync(dir)
+  if (!files.length || (files.length === 1 && files[0] === 'creds.json'))
+    fs.rmSync(dir, { recursive: true, force: true })
 }
 
 export async function initClient() {
-  if (!fs.existsSync(SESSION_BASE_DIR)) {
-    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
-
-  }
-  deleteEmptyDirs(SESSION_BASE_DIR);
-
+  fs.mkdirSync(SESSION_BASE_DIR, { recursive: true })
+  deleteEmptyDirs(SESSION_BASE_DIR)
   try {
-    for (const dirent of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
-      if (!dirent.isDirectory() || dirent.name === 'auth') continue;
-      const sessionId = dirent.name;
-      const sessionPath = path.join(SESSION_BASE_DIR, sessionId);
-      deleteEmptyDirs(sessionPath);
-      if (!fs.existsSync(sessionPath)) {
-
-        continue;
-      }
+    for (const d of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
+      if (!d.isDirectory() || d.name === 'auth') continue
+      const sessionPath = path.join(SESSION_BASE_DIR, d.name)
+      deleteEmptyDirs(sessionPath)
+      if (!fs.existsSync(sessionPath)) continue
       try {
-        await initSession(sessionId);
-
+        await initSession(d.name)
       } catch (err) {
-        logger.warn(`⚠️ Falló restaurar sesión '${sessionId}': ${err.message}`);
-        deleteEmptyDirs(sessionPath);
+        logger.warn(`⚠️ Falló restaurar sesión '${d.name}': ${err.message}`)
+        deleteEmptyDirs(sessionPath)
       }
     }
   } catch (err) {
-    logger.error(`❌ Error al escanear sesiones: ${err.message}`);
+    logger.error(`❌ Error al escanear sesiones: ${err.message}`)
   }
 }
 // @path: config/config.js
