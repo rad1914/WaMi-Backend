@@ -1,18 +1,22 @@
-// @path: message/message.routes.js
-import { Router } from 'express';
+// @path: middlewares/attachSession.js
 import { extractSock } from '../utils/session.js';
-import { controllers } from './message.controller.js';
 
-const router = Router();
-
-router.use((req, res, next) => {
+export function attachSession(req, res, next) {
   try {
     req.sock = extractSock(req);
     next();
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
-});
+}
+// @path: message/message.routes.js
+import { Router } from 'express';
+import { attachSession } from '../middlewares/attachSession.js';
+import { controllers } from './message.controller.js';
+
+const router = Router();
+
+router.use(attachSession);
 
 Object.keys(controllers).forEach(action =>
   router.post(`/${action}`, controllers[action])
@@ -420,46 +424,57 @@ import { initSession } from './session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
 function deleteEmptyDirs(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir)) {
-    const fullPath = path.join(dir, entry);
-    if (fs.statSync(fullPath).isDirectory()) {
-      deleteEmptyDirs(fullPath);
-    }
-  }
-  if (fs.readdirSync(dir).length === 0) {
-    fs.rmdirSync(dir);
-    logger.info(`🗑️ Deleted empty directory: ${dir}`);
-  }
+  if (!fs.existsSync(dir)) return;
+
+  for (const entry of fs.readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    if (fs.statSync(fullPath).isDirectory()) {
+      deleteEmptyDirs(fullPath);
+    }
+  }
+
+  const contents = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+  const onlyCreds = contents.length === 1 && contents[0] === 'creds.json';
+
+  if (contents.length === 0 || onlyCreds) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    logger.info(`🗑️ Deleted directory: ${dir} (${onlyCreds ? 'only creds.json' : 'empty'})`);
+  }
 }
 
 export async function initClient() {
-  if (!fs.existsSync(SESSION_BASE_DIR)) {
-    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
-    logger.info(`📂 Created ${SESSION_BASE_DIR}`);
-  }
+  if (!fs.existsSync(SESSION_BASE_DIR)) {
+    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+    logger.info(`📂 Created ${SESSION_BASE_DIR}`);
+  }
 
-  try {
-    for (const dirent of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
-      if (!dirent.isDirectory() || dirent.name === 'auth') continue;
+  deleteEmptyDirs(SESSION_BASE_DIR);
 
-      const sessionId = dirent.name;
-      const sessionPath = path.join(SESSION_BASE_DIR, sessionId);
+  try {
+    for (const dirent of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
+      if (!dirent.isDirectory() || dirent.name === 'auth') continue;
 
-      for (const sub of fs.readdirSync(sessionPath, { withFileTypes: true })) {
-        if (sub.isDirectory()) deleteEmptyDirs(path.join(sessionPath, sub.name));
-      }
+      const sessionId = dirent.name;
+      const sessionPath = path.join(SESSION_BASE_DIR, sessionId);
 
-      try {
-        await initSession(sessionId);
-        logger.info(`✅ [${sessionId}] session restored`);
-      } catch (err) {
-        logger.warn(`⚠️ Failed to restore session '${sessionId}': ${err.message}`);
-      }
-    }
-  } catch (err) {
-    logger.error(`❌ Failed to scan sessions: ${err.message}`);
-  }
+      deleteEmptyDirs(sessionPath);
+
+      if (!fs.existsSync(sessionPath)) {
+        logger.info(`🗑️ Skipping removed empty/creds-only session: ${sessionId}`);
+        continue;
+      }
+
+      try {
+        await initSession(sessionId);
+        logger.info(`✅ [${sessionId}] session restored`);
+      } catch (err) {
+        logger.warn(`⚠️ Failed to restore session '${sessionId}': ${err.message}`);
+        deleteEmptyDirs(sessionPath);
+      }
+    }
+  } catch (err) {
+    logger.error(`❌ Failed to scan sessions: ${err.message}`);
+  }
 }
 // @path: config/config.js
 import path from 'path';
@@ -473,19 +488,12 @@ export const SESSION_BASE_DIR = path.join(ROOT_DIR, '.sessions');
 export const STORE_FILE        = path.join(SESSION_BASE_DIR, 'store.json');
 // @path: chats/chats.routes.js
 import { Router } from 'express';
-import { extractSock } from '../utils/session.js';
+import { attachSession } from '../middlewares/attachSession.js';
 import * as ctrl from './chats.controller.js';
 
 const router = Router();
 
-router.use((req, res, next) => {
-  try {
-    req.sock = extractSock(req);
-    next();
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
-  }
-});
+router.use(attachSession);
 
 router.get('/', ctrl.getAllChats);
 router.get('/:jid', ctrl.getChatByJid);
