@@ -1,3 +1,4 @@
+// @path: config/config.js
 import path from 'path';
 import { fileURLToPath } from 'url';
 

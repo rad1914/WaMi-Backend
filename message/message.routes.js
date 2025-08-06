@@ -1,3 +1,4 @@
+// @path: message/message.routes.js
 import { Router } from 'express';
 import { checkSession } from '../middlewares/checkSession.js';
 import { controllers } from './message.controller.js';

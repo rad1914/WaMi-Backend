@@ -26,7 +26,7 @@ call_endpoint() {
 }
 
 echo "🔧 1. Using static session ID…"
-sessionId="2fa71ff3-3649-4888-a51e-43e96b3048d0"
+sessionId="deee3ea2-431b-47ec-b476-eef2abc47602"
 echo
 
 echo "⏳ 2. Initializing session on server…"
@@ -105,19 +105,4 @@ echo
 echo "✅ All chat tests completed."
 echo
 
-echo "🧹 5. Cleaning up session…"
-cleanup_raw=$(curl -sS -X DELETE "$AUTH_URL/remove" -H "Content-Type: application/json" \
-    -d "{\"sessionId\":\"$sessionId\"}" -w "\n%{http_code}")
-cleanup_body=$(echo "$cleanup_raw" | sed '$d')
-cleanup_status=$(echo "$cleanup_raw" | tail -n1)
-echo "   HTTP status: $cleanup_status"
-echo "   Body: $cleanup_body"
-if [[ "$cleanup_status" -eq 200 ]];
-then
-    echo "✅ Session deleted successfully."
-else
-    echo "❌ Session cleanup failed: $cleanup_body"
-fi
-
-echo
 echo "🎉 Test cycle finished."

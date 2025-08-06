@@ -1,13 +1,11 @@
+// @path: client/session.manager.js
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
-import { store, saveStore } from '../store/store.js';
 
 const sessions = new Map();
 
 export async function initSession(id, force = false) {
-  if (!force && sessions.has(id)) {
-    return sessions.get(id);
-  }
+  if (!force && sessions.has(id)) return sessions.get(id);
 
   const { state, saveCreds } = await initAuthState(id);
   const sock = await createSocket({
@@ -17,24 +15,21 @@ export async function initSession(id, force = false) {
     reinit: () => initSession(id, true)
   });
 
-  const entry = { sock, saveCreds };
-  sessions.set(id, entry);
-  return entry;
+  return sessions.set(id, { sock, saveCreds }).get(id);
 }
 
 export function getSession(id) {
-  const entry = sessions.get(id);
-  if (!entry) throw new Error(`Session '${id}' not found`);
-  return entry.sock;
+  const session = sessions.get(id);
+  if (!session) throw new Error(`Session '${id}' not found`);
+  return session.sock;
 }
 
 export async function deleteSession(id) {
-  const entry = sessions.get(id);
-  if (entry?.sock?.logout) await entry.sock.logout();
+  const session = sessions.get(id);
+  if (session?.sock?.logout) await session.sock.logout();
   sessions.delete(id);
 
-  const dir = await import('path').then(p => p.resolve('.sessions', id));
-  await import('fs').then(fs => {
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  });
+  const path = (await import('path')).resolve('.sessions', id);
+  const fs = await import('fs');
+  if (fs.existsSync(path)) fs.rmSync(path, { recursive: true, force: true });
 }
