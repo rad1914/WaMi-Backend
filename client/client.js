@@ -31,7 +31,6 @@ export async function initClient() {
     logger.info(`📂 Created ${SESSION_BASE_DIR}`);
   }
 
-  // Clean any empty or creds-only directories at startup
   deleteEmptyDirs(SESSION_BASE_DIR);
 
   try {
@@ -41,10 +40,8 @@ export async function initClient() {
       const sessionId = dirent.name;
       const sessionPath = path.join(SESSION_BASE_DIR, sessionId);
 
-      // Clean empty/creds-only subdirectories inside this session before restore
       deleteEmptyDirs(sessionPath);
 
-      // If cleanup removed the session directory entirely, skip restoration
       if (!fs.existsSync(sessionPath)) {
         logger.info(`🗑️ Skipping removed empty/creds-only session: ${sessionId}`);
         continue;
