@@ -1,6 +1,6 @@
 // @path: message/message.routes.js
 import { Router } from 'express';
-import { attachSession } from '../../middlewares/attachSession.js';
+import { attachSession } from '../middlewares/attachSession.js';
 import { controllers } from './message.controller.js';
 
 const router = Router();

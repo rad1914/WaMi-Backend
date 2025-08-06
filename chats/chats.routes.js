@@ -1,6 +1,6 @@
 // @path: chats/chats.routes.js
 import { Router } from 'express';
-import { attachSession } from '../../middlewares/attachSession.js';
+import { attachSession } from '../middlewares/attachSession.js';
 import * as ctrl from './chats.controller.js';
 
 const router = Router();
