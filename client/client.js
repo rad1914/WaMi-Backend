@@ -6,14 +6,24 @@ import { SESSION_BASE_DIR } from '../config/config.js';
 
 const deleteEmptyDirs = dir => {
   if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir)) {
-    const fullPath = path.join(dir, entry);
-    if (fs.statSync(fullPath).isDirectory()) deleteEmptyDirs(fullPath);
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      deleteEmptyDirs(path.join(dir, entry.name));
+    }
   }
-  const files = fs.readdirSync(dir);
-  if (!files.length || (files.length === 1 && files[0] === 'creds.json'))
+
+  const remaining = fs.readdirSync(dir);
+  if (
+    remaining.length === 0 ||
+    (remaining.length === 1 && remaining[0] === 'creds.json')
+  ) {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
 };
+
 
 export async function initClient() {
   fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });

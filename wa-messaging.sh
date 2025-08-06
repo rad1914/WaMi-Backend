@@ -24,7 +24,7 @@ call_endpoint() {
 }
 
 echo "🔧 1. Using static session ID…"
-sessionId="bfc7de72-e0eb-434a-88b2-6c7567d4d97c"
+sessionId="b1d45aba-ff1f-4c8e-b04c-8149a6a43c22"
 
 echo "⏳ 2. Initializing session on server…"
 reload_raw=$(curl -sS -X POST "$AUTH_URL/reload" -H "Content-Type: application/json" \
