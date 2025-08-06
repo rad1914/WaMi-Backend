@@ -1,108 +1,18 @@
-List redundant functions:
-// @path: middlewares/checkSession.js
+// @path: message/message.routes.js
+import { Router } from 'express';
 import { extractSock } from '../utils/session.js';
+import { controllers } from './message.controller.js';
 
-export function checkSession(req, res, next) {
+const router = Router();
+
+router.use((req, res, next) => {
   try {
     req.sock = extractSock(req);
     next();
   } catch (err) {
-    res
-      .status(err.status || 500)
-      .json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
-}
-// @path: store/store.js
-import fs from 'fs';
-import { makeInMemoryStore } from '@whiskeysockets/baileys';
-import logger from '../utils/logger.js';
-import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js';
-
-function loadStore() {
-  try {
-    if (fs.existsSync(STORE_FILE)) {
-      return JSON.parse(fs.readFileSync(STORE_FILE, 'utf-8'));
-    }
-  } catch (e) {
-    console.warn('⚠️ Could not read store file:', e);
-  }
-  return {};
-}
-
-export function saveStore(store) {
-  try {
-    const data = {
-      chats:    store.chats.all ? store.chats.all() : [],
-      contacts: store.contacts.all ? store.contacts.all() : [],
-      messages: store.messages.all ? store.messages.all() : []
-    };
-    if (!fs.existsSync(SESSION_BASE_DIR)) {
-      fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
-    }
-    fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (e) {
-    console.warn('⚠️ Error persisting store:', e);
-  }
-}
-
-export const store = makeInMemoryStore({ logger });
-
-store.messages = {
-  data: new Map(),
-  upsert(msg) {
-    const id = msg?.key?.id;
-    if (id) this.data.set(id, msg);
-  },
-  get(id) {
-    return this.data.get(id);
-  },
-  all() {
-    return Array.from(this.data.values());
-  }
-};
-
-store.contacts = {
-  data: new Map(),
-  upsert(contact) {
-    const id = contact?.id || contact?.jid;
-    if (id) this.data.set(id, contact);
-  },
-  get(id) {
-    return this.data.get(id);
-  },
-  all() {
-    return Array.from(this.data.values());
-  }
-};
-
-const loaded = loadStore();
-
-if (Array.isArray(loaded.chats)) {
-  for (const chat of loaded.chats) {
-    if (chat.id) {
-      store.chats.upsert(chat);
-    }
-  }
-}
-
-if (Array.isArray(loaded.contacts)) {
-  for (const contact of loaded.contacts) {
-    store.contacts.upsert(contact);
-  }
-}
-
-if (Array.isArray(loaded.messages)) {
-  for (const msg of loaded.messages) {
-    store.messages.upsert(msg);
-  }
-}
-// @path: message/message.routes.js
-import { Router } from 'express';
-import { checkSession } from '../middlewares/checkSession.js';
-import { controllers } from './message.controller.js';
-
-const router = Router();
-router.use(checkSession);
+});
 
 Object.keys(controllers).forEach(action =>
   router.post(`/${action}`, controllers[action])
@@ -130,7 +40,6 @@ export const controllers = Object.entries(mapping)
     return out;
   }, {});
 // @path: message/message.service.js
-
 const getPayload = (type, content, options) => ({
   text:     { text: content },
   image:    { image: { url: content } },
@@ -196,24 +105,28 @@ export async function createSession() {
 }
 
 export async function removeSession({ sessionId }) {
-  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  if (!sessionId) throw error('sessionId is required', 400);
   await deleteSession(sessionId);
   return { success: true };
 }
 
 export async function getQRCode({ sessionId }) {
-  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  if (!sessionId) throw error('sessionId is required', 400);
   const { sock } = await initSession(sessionId);
   if (sock.user?.id) return { success: true };
   const qr = getPendingQR(sessionId);
   if (qr) return { qr };
-  throw Object.assign(new Error('QR not yet available'), { status: 404 });
+  throw error('QR not yet available', 404);
 }
 
 export function checkAuth({ sessionId }) {
-  if (!sessionId) throw Object.assign(new Error('sessionId is required'), { status: 400 });
+  if (!sessionId) throw error('sessionId is required', 400);
   const client = getSession(sessionId);
   return { authenticated: !!client.user?.id };
+}
+
+function error(message, status) {
+  return Object.assign(new Error(message), { status });
 }
 // @path: auth/auth.routes.js
 import { Router } from 'express';
@@ -236,19 +149,13 @@ export default router;
 import * as service from './auth.service.js';
 import { wrapController } from '../utils/utils.js';
 
-export const createSession = wrapController(async () => service.createSession());
-export const removeSession = wrapController(async body =>
-  service.removeSession(body)
-);
-export const getQRCode = wrapController(async query =>
-  service.getQRCode(query)
-);
-export const checkAuth = wrapController(async query =>
-  service.checkAuth(query)
-);
+export const createSession = wrapController(service.createSession);
+export const removeSession = wrapController(service.removeSession);
+export const getQRCode     = wrapController(service.getQRCode);
+export const checkAuth     = wrapController(service.checkAuth);
+
 export const reload = wrapController(
-  async body => {
-    const { sessionId } = body;
+  async ({ sessionId }) => {
     if (!sessionId) throw new Error('sessionId is required');
     await service.createSession(sessionId, true);
     return { reloaded: true };
@@ -377,7 +284,6 @@ export async function initAuthState(subDir = 'auth') {
   return useMultiFileAuthState(dir);
 }
 // @path: utils/utils.js
-
 export function wrapController(fn, opts = {}) {
   const extractor =
     opts.input === 'query'   ? req => req.query
@@ -402,22 +308,13 @@ export function wrapController(fn, opts = {}) {
   };
 }
 // @path: client/socketFactory.js
-import {
-  makeWASocket,
-  fetchLatestBaileysVersion,
-  Browsers
-} from '@whiskeysockets/baileys';
+import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
-import { store, saveStore } from '../store/store.js';
+import { store, saveStore } from './store.js';
 
-let cachedVersion = null;
-async function getBaileysVersion() {
-  if (!cachedVersion) {
-    const { version } = await fetchLatestBaileysVersion();
-    cachedVersion = version;
-  }
-  return cachedVersion;
-}
+let cachedVersion;
+const getBaileysVersion = async () =>
+  cachedVersion ||= (await fetchLatestBaileysVersion()).version;
 
 export async function createSocket({ authState, sessionId, browserName, reinit }) {
   const sock = makeWASocket({
@@ -425,44 +322,32 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
     auth: authState,
     browser: Browsers.macOS(browserName),
     shouldSyncHistoryMessage: () => true,
-    printQRInTerminal: false
+    printQRInTerminal: false,
   });
 
   registerSocketEvents(sock, sessionId, authState.saveCreds, reinit);
   store.bind(sock.ev);
 
   sock.ev.on('messaging-history.set', ({ chats, messages, contacts }) => {
-    for (const chat of chats) {
-      store.chats.upsert(chat);
-    }
-    for (const msg of messages) {
-
-      store.messages.upsert(msg);
-    }
-    for (const contact of contacts) {
-      store.contacts.upsert(contact);
-    }
+    chats.forEach(chat => store.chats.upsert(chat));
+    messages.forEach(msg => store.messages.upsert(msg));
+    contacts.forEach(contact => store.contacts.upsert(contact));
     saveStore(store);
   });
 
-  sock.ev.on('creds.update', () => saveStore(store));
-  sock.ev.on('chats.set',      () => saveStore(store));
-  sock.ev.on('chats.upsert',   () => saveStore(store));
-  sock.ev.on('chats.update',   () => saveStore(store));
+  ['creds.update', 'chats.set', 'chats.upsert', 'chats.update']
+    .forEach(event => sock.ev.on(event, () => saveStore(store)));
 
   return sock;
 }
 // @path: client/session.manager.js
 import { createSocket } from './socketFactory.js';
 import { initAuthState } from '../utils/session.js';
-import { store, saveStore } from '../store/store.js';
 
 const sessions = new Map();
 
 export async function initSession(id, force = false) {
-  if (!force && sessions.has(id)) {
-    return sessions.get(id);
-  }
+  if (!force && sessions.has(id)) return sessions.get(id);
 
   const { state, saveCreds } = await initAuthState(id);
   const sock = await createSocket({
@@ -472,56 +357,109 @@ export async function initSession(id, force = false) {
     reinit: () => initSession(id, true)
   });
 
-  const entry = { sock, saveCreds };
-  sessions.set(id, entry);
-  return entry;
+  return sessions.set(id, { sock, saveCreds }).get(id);
 }
 
 export function getSession(id) {
-  const entry = sessions.get(id);
-  if (!entry) throw new Error(`Session '${id}' not found`);
-  return entry.sock;
+  const session = sessions.get(id);
+  if (!session) throw new Error(`Session '${id}' not found`);
+  return session.sock;
 }
 
 export async function deleteSession(id) {
-  const entry = sessions.get(id);
-  if (entry?.sock?.logout) await entry.sock.logout();
+  const session = sessions.get(id);
+  if (session?.sock?.logout) await session.sock.logout();
   sessions.delete(id);
 
-  const dir = await import('path').then(p => p.resolve('.sessions', id));
-  await import('fs').then(fs => {
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  });
+  const path = (await import('path')).resolve('.sessions', id);
+  const fs = await import('fs');
+  if (fs.existsSync(path)) fs.rmSync(path, { recursive: true, force: true });
 }
+// @path: client/store.js
+import fs from 'fs'
+import { makeInMemoryStore } from '@whiskeysockets/baileys'
+import logger from '../utils/logger.js'
+import { STORE_FILE, SESSION_BASE_DIR } from '../config/config.js'
+
+export const store = makeInMemoryStore({ logger })
+
+const mapStore = () => {
+  const data = new Map()
+  return {
+    upsert: i => {
+      const id = i?.id || i?.jid || i?.key?.id
+      if (id) data.set(id, i)
+    },
+    all: () => [...data.values()]
+  }
+}
+
+store.contacts = mapStore()
+store.messages = mapStore()
+
+const load = () => fs.existsSync(STORE_FILE) ? JSON.parse(fs.readFileSync(STORE_FILE)) : {}
+export const saveStore = () => {
+  if (!fs.existsSync(SESSION_BASE_DIR)) fs.mkdirSync(SESSION_BASE_DIR, { recursive: true })
+  fs.writeFileSync(STORE_FILE, JSON.stringify({
+    chats: store.chats.all(),
+    contacts: store.contacts.all(),
+    messages: store.messages.all()
+  }, null, 2))
+}
+
+const loaded = load()
+loaded.chats?.forEach(c => c.id && store.chats.upsert(c))
+loaded.contacts?.forEach(store.contacts.upsert)
+loaded.messages?.forEach(store.messages.upsert)
 // @path: client/client.js
 
 import fs from 'fs';
+import path from 'path';
 import logger from '../utils/logger.js';
 import { initSession } from './session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
+function deleteEmptyDirs(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir)) {
+    const fullPath = path.join(dir, entry);
+    if (fs.statSync(fullPath).isDirectory()) {
+      deleteEmptyDirs(fullPath);
+    }
+  }
+  if (fs.readdirSync(dir).length === 0) {
+    fs.rmdirSync(dir);
+    logger.info(`🗑️ Deleted empty directory: ${dir}`);
+  }
+}
+
 export async function initClient() {
-  if (!fs.existsSync(SESSION_BASE_DIR)) {
-    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
-    logger.info(`📂 Created sessions directory at ${SESSION_BASE_DIR}`);
-  }
+  if (!fs.existsSync(SESSION_BASE_DIR)) {
+    fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+    logger.info(`📂 Created ${SESSION_BASE_DIR}`);
+  }
 
-  try {
-    const sessionDirs = fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })
-      .filter(dir => dir.isDirectory() && dir.name !== 'auth')
-      .map(dir => dir.name);
+  try {
+    for (const dirent of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
+      if (!dirent.isDirectory() || dirent.name === 'auth') continue;
 
-    for (const id of sessionDirs) {
-      try {
-        await initSession(id);
-        logger.info(`✅ [${id}] session restored`);
-      } catch (err) {
-        logger.warn(`⚠️ Failed to restore session '${id}': ${err.message}`);
-      }
-    }
-  } catch (err) {
-    logger.error(`❌ Failed to scan session directories: ${err.message}`);
-  }
+      const sessionId = dirent.name;
+      const sessionPath = path.join(SESSION_BASE_DIR, sessionId);
+
+      for (const sub of fs.readdirSync(sessionPath, { withFileTypes: true })) {
+        if (sub.isDirectory()) deleteEmptyDirs(path.join(sessionPath, sub.name));
+      }
+
+      try {
+        await initSession(sessionId);
+        logger.info(`✅ [${sessionId}] session restored`);
+      } catch (err) {
+        logger.warn(`⚠️ Failed to restore session '${sessionId}': ${err.message}`);
+      }
+    }
+  } catch (err) {
+    logger.error(`❌ Failed to scan sessions: ${err.message}`);
+  }
 }
 // @path: config/config.js
 import path from 'path';
@@ -535,15 +473,22 @@ export const SESSION_BASE_DIR = path.join(ROOT_DIR, '.sessions');
 export const STORE_FILE        = path.join(SESSION_BASE_DIR, 'store.json');
 // @path: chats/chats.routes.js
 import { Router } from 'express';
-import { checkSession } from '../middlewares/checkSession.js';
+import { extractSock } from '../utils/session.js';
 import * as ctrl from './chats.controller.js';
 
 const router = Router();
-router.use(checkSession);
+
+router.use((req, res, next) => {
+  try {
+    req.sock = extractSock(req);
+    next();
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
 
 router.get('/', ctrl.getAllChats);
 router.get('/:jid', ctrl.getChatByJid);
-router.get('/pinned', ctrl.getPinnedChats);
 
 export default router;
 // @path: chats/chats.controller.js
@@ -557,13 +502,8 @@ export const getAllChats = wrapController(async (_input, req) =>
 export const getChatByJid = wrapController(async ({ jid }, req) =>
   service.getChatByJid(req.sock, jid)
 );
-
-export 
-const getPinnedChats = wrapController((_, req) =>
-  svc.getPinnedChats(req.sock)
-);
 // @path: chats/chats.service.js
-import { store, saveStore } from '../store/store.js';
+import { store, saveStore } from '../client/store.js';
 
 export async function getAllChats(sock) {
 
