@@ -5,7 +5,6 @@ import { controllers } from './message.controller.js';
 
 const router = Router();
 
-// Usamos el middleware común
 router.use(attachSession);
 
 Object.keys(controllers).forEach(action =>

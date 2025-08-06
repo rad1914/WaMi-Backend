@@ -5,7 +5,6 @@ import * as ctrl from './chats.controller.js';
 
 const router = Router();
 
-// Usamos el mismo middleware
 router.use(attachSession);
 
 router.get('/', ctrl.getAllChats);
