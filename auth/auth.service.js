@@ -3,6 +3,8 @@ import { initSession, deleteSession, getSession } from '../client/session.manage
 import { getPendingQR } from '../utils/helpers.js';
 import { randomUUID } from 'crypto';
 
+const error = (msg, status) => Object.assign(new Error(msg), { status });
+
 export async function createSession() {
   const sessionId = randomUUID();
   await initSession(sessionId);
@@ -26,10 +28,5 @@ export async function getQRCode({ sessionId }) {
 
 export function checkAuth({ sessionId }) {
   if (!sessionId) throw error('sessionId is required', 400);
-  const client = getSession(sessionId);
-  return { authenticated: !!client.user?.id };
-}
-
-function error(message, status) {
-  return Object.assign(new Error(message), { status });
+  return { authenticated: !!getSession(sessionId).user?.id };
 }

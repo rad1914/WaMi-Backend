@@ -102,6 +102,8 @@ import { initSession, deleteSession, getSession } from '../client/session.manage
 import { getPendingQR } from '../utils/helpers.js';
 import { randomUUID } from 'crypto';
 
+const error = (msg, status) => Object.assign(new Error(msg), { status });
+
 export async function createSession() {
   const sessionId = randomUUID();
   await initSession(sessionId);
@@ -125,12 +127,7 @@ export async function getQRCode({ sessionId }) {
 
 export function checkAuth({ sessionId }) {
   if (!sessionId) throw error('sessionId is required', 400);
-  const client = getSession(sessionId);
-  return { authenticated: !!client.user?.id };
-}
-
-function error(message, status) {
-  return Object.assign(new Error(message), { status });
+  return { authenticated: !!getSession(sessionId).user?.id };
 }
 // @path: auth/auth.routes.js
 import { Router } from 'express';
@@ -189,65 +186,66 @@ app.listen(PORT, async () => {
   try { await initClient(); } 
   catch (err) { console.error(`❌ Client init error: ${err.message}`); }
 });
-// @path: utils/helpers.js
-import { Boom } from '@hapi/boom'
-import { DisconnectReason } from '@whiskeysockets/baileys'
-import logger from './logger.js'
+import { Boom } from '@hapi/boom';
+import { DisconnectReason } from '@whiskeysockets/baileys';
+import fs from 'fs';
+import path from 'path';
 
-const pendingQRs = new Map()
-export const getPendingQR = id => pendingQRs.get(id) || null
+export const deleteEmptyDirs = dir => {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) deleteEmptyDirs(path.join(dir, entry.name));
+  }
+  const files = fs.readdirSync(dir);
+  if (files.length === 0 || (files.length === 1 && files[0] === 'creds.json')) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+const pendingQRs = new Map();
+
+export const getPendingQR = id => pendingQRs.get(id) ?? null;
 
 export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-    if (connection !== 'close') return
-    const err = lastDisconnect?.error
-    const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut)
-    logger.warn(`❌ [${id}] desconectado (${err?.message}). Reconnect=${reconnect}`)
-    try { await saveCreds() } catch (e) { logger.error(`🔒 [${id}] fallo al guardar credenciales: ${e.message}`) }
-    if (reconnect) try { await reinit?.(id) } catch (e) { logger.error(`❌ [${id}] reinit falló: ${e.message}`) }
-  })
-}
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+    if (qr) pendingQRs.set(id, qr);
+    if (connection !== 'close') return;
+
+    const err = lastDisconnect?.error;
+    const reconnect =
+      !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
+
+    try { await saveCreds(); } catch {}
+    if (reconnect) try { await reinit?.(id); } catch {}
+  });
+};
 // @path: utils/logger.js
 import pino from 'pino';
-
-const isDev = process.env.NODE_ENV !== 'production';
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'warn',  
-  ...(isDev && {
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:standard',
-        ignore: 'pid,hostname'
-      }
-    }
-  })
-});
-
-export default logger;
+export default pino({ level: process.env.LOG_LEVEL || 'warn' });
 // @path: utils/session.js
-import path from 'path';
+
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { getSession } from '../client/session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
-function extractSessionId(req) {
+export function extractSock(req) {
   const id =
     req.headers['x-session-id'] ||
     req.body?.sessionId ||
     req.query?.sessionId;
-  if (!id) throw Object.assign(new Error('sessionId is required'), { status: 400 });
-  return id;
-}
 
-export function extractSock(req) {
-  const id = extractSessionId(req);
+  if (!id) {
+    const err = new Error('sessionId is required');
+    err.status = 400;
+    throw err;
+  }
+
   try {
     return getSession(id);
   } catch {
-    throw Object.assign(new Error('Invalid sessionId'), { status: 401 });
+    const err = new Error('Invalid sessionId');
+    err.status = 401;
+    throw err;
   }
 }
 
@@ -384,42 +382,32 @@ loaded.chats?.forEach(c => c.id && store.chats.upsert(c))
 loaded.contacts?.forEach(store.contacts.upsert)
 loaded.messages?.forEach(store.messages.upsert)
 // @path: client/client.js
-import fs from 'fs'
-import path from 'path'
-import logger from '../utils/logger.js'
-import { initSession } from './session.manager.js'
-import { SESSION_BASE_DIR } from '../config/config.js'
 
-const deleteEmptyDirs = dir => {
-  if (!fs.existsSync(dir)) return
-  for (const entry of fs.readdirSync(dir)) {
-    const fullPath = path.join(dir, entry)
-    if (fs.statSync(fullPath).isDirectory()) deleteEmptyDirs(fullPath)
-  }
-  const files = fs.readdirSync(dir)
-  if (!files.length || (files.length === 1 && files[0] === 'creds.json'))
-    fs.rmSync(dir, { recursive: true, force: true })
-}
+import fs from 'fs';
+import path from 'path';
+import { initSession } from './session.manager.js';
+import { SESSION_BASE_DIR } from '../config/config.js';
+import { deleteEmptyDirs } from '../utils/helpers.js'; 
 
 export async function initClient() {
-  fs.mkdirSync(SESSION_BASE_DIR, { recursive: true })
-  deleteEmptyDirs(SESSION_BASE_DIR)
+
+  fs.mkdirSync(SESSION_BASE_DIR, { recursive: true });
+
+  deleteEmptyDirs(SESSION_BASE_DIR);
+
   try {
     for (const d of fs.readdirSync(SESSION_BASE_DIR, { withFileTypes: true })) {
-      if (!d.isDirectory() || d.name === 'auth') continue
-      const sessionPath = path.join(SESSION_BASE_DIR, d.name)
-      deleteEmptyDirs(sessionPath)
-      if (!fs.existsSync(sessionPath)) continue
+      if (!d.isDirectory() || d.name === 'auth') continue;
+      const sessionPath = path.join(SESSION_BASE_DIR, d.name);
+      deleteEmptyDirs(sessionPath);
+      if (!fs.existsSync(sessionPath)) continue;
       try {
-        await initSession(d.name)
-      } catch (err) {
-        logger.warn(`⚠️ Falló restaurar sesión '${d.name}': ${err.message}`)
-        deleteEmptyDirs(sessionPath)
+        await initSession(d.name);
+      } catch {
+        deleteEmptyDirs(sessionPath);
       }
     }
-  } catch (err) {
-    logger.error(`❌ Error al escanear sesiones: ${err.message}`)
-  }
+  } catch {}
 }
 // @path: config/config.js
 import path from 'path';
