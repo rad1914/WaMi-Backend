@@ -6,27 +6,15 @@ import { getSession } from '../client/session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
 export function extractSock(req) {
-  const id =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-
-  if (!id) {
-    const err = new Error('sessionId is required');
-    err.status = 400;
-    throw err;
-  }
+  const id = req.headers['x-session-id'] || req.body?.sessionId || req.query?.sessionId;
+  if (!id) throw Object.assign(new Error('sessionId is required'), { status: 400 });
 
   try {
     return getSession(id);
   } catch {
-    const err = new Error('Invalid sessionId');
-    err.status = 401;
-    throw err;
+    throw Object.assign(new Error('Invalid sessionId'), { status: 401 });
   }
 }
 
-export async function initAuthState(subDir = 'auth') {
-  const dir = path.resolve(SESSION_BASE_DIR, subDir);
-  return useMultiFileAuthState(dir);
-}
+export const initAuthState = (subDir = 'auth') =>
+  useMultiFileAuthState(path.resolve(SESSION_BASE_DIR, subDir));

@@ -184,8 +184,9 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`✅ API running on http://localhost:${PORT}/api`);
   try { await initClient(); } 
-  catch (err) { console.error(`Client init error: ${err.message}`); }
+  catch (err) { console.error(`❌ Client init error: ${err.message}`); }
 });
+// @path: utils/helpers.js
 import { Boom } from '@hapi/boom';
 import { DisconnectReason } from '@whiskeysockets/baileys';
 import fs from 'fs';
@@ -224,35 +225,24 @@ import pino from 'pino';
 export default pino({ level: process.env.LOG_LEVEL || 'warn' });
 // @path: utils/session.js
 
+import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { getSession } from '../client/session.manager.js';
 import { SESSION_BASE_DIR } from '../config/config.js';
 
 export function extractSock(req) {
-  const id =
-    req.headers['x-session-id'] ||
-    req.body?.sessionId ||
-    req.query?.sessionId;
-
-  if (!id) {
-    const err = new Error('sessionId is required');
-    err.status = 400;
-    throw err;
-  }
+  const id = req.headers['x-session-id'] || req.body?.sessionId || req.query?.sessionId;
+  if (!id) throw Object.assign(new Error('sessionId is required'), { status: 400 });
 
   try {
     return getSession(id);
   } catch {
-    const err = new Error('Invalid sessionId');
-    err.status = 401;
-    throw err;
+    throw Object.assign(new Error('Invalid sessionId'), { status: 401 });
   }
 }
 
-export async function initAuthState(subDir = 'auth') {
-  const dir = path.resolve(SESSION_BASE_DIR, subDir);
-  return useMultiFileAuthState(dir);
-}
+export const initAuthState = (subDir = 'auth') =>
+  useMultiFileAuthState(path.resolve(SESSION_BASE_DIR, subDir));
 // @path: utils/utils.js
 export function wrapController(fn, opts = {}) {
   const extractor =
