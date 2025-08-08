@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Web Clone</title>
+    <title>WhatsApp API Frontend</title>
     <style>
         * {
             margin: 0;
@@ -13,135 +13,118 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            height: 100vh;
-            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .container {
-            display: flex;
-            height: 100vh;
-        }
-
-        /* Auth Screen */
-        .auth-screen {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            width: 95%;
+            max-width: 1400px;
+            height: 90vh;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .header {
+            background: linear-gradient(45deg, #25D366, #128C7E);
+            padding: 20px;
             color: white;
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .auth-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .session-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #44ff44;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .auth-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             padding: 40px;
-            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            max-width: 400px;
-            width: 90%;
-        }
-
-        .auth-card h1 {
-            margin-bottom: 30px;
-            font-size: 2.5em;
-            font-weight: 300;
+            text-align: center;
         }
 
         .qr-container {
             background: white;
-            border-radius: 15px;
             padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             margin: 20px 0;
-            min-height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         .qr-code {
-            max-width: 100%;
-            height: auto;
+            width: 256px;
+            height: 256px;
         }
 
-        .loading {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        button {
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 10px;
-            transition: all 0.3s ease;
-        }
-
-        button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* Sidebar */
         .sidebar {
             width: 400px;
-            background-color: white;
-            border-right: 1px solid #e5e5e5;
+            background: #f8f9fa;
+            border-right: 1px solid #e1e8ed;
             display: flex;
             flex-direction: column;
         }
 
-        .sidebar-header {
-            background-color: #f8f9fa;
-            padding: 15px 20px;
-            border-bottom: 1px solid #e5e5e5;
-            display: flex;
-            justify-content: between;
-            align-items: center;
-        }
-
-        .sidebar-header h2 {
-            color: #3b4a54;
-            font-size: 1.2em;
-            flex: 1;
-        }
-
-        .session-info {
-            font-size: 0.8em;
-            color: #667781;
-            background: #e3f2fd;
-            padding: 4px 8px;
-            border-radius: 10px;
-        }
-
         .search-bar {
-            padding: 15px 20px;
-            background-color: #f8f9fa;
-            border-bottom: 1px solid #e5e5e5;
+            padding: 20px;
+            border-bottom: 1px solid #e1e8ed;
         }
 
         .search-input {
             width: 100%;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
+            padding: 12px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 25px;
             font-size: 14px;
             outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            border-color: #25D366;
         }
 
         .chat-list {
@@ -150,1129 +133,1299 @@
         }
 
         .chat-item {
-            padding: 15px 20px;
+            padding: 16px 20px;
             border-bottom: 1px solid #f0f0f0;
             cursor: pointer;
             transition: background-color 0.2s;
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
         .chat-item:hover {
-            background-color: #f5f5f5;
+            background: #f0f8ff;
         }
 
         .chat-item.active {
-            background-color: #e5ddd5;
+            background: #e3f2fd;
+            border-right: 3px solid #25D366;
         }
 
         .chat-avatar {
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(45deg, #25D366, #128C7E);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: bold;
-            font-size: 1.2em;
-            margin-right: 15px;
+            font-size: 18px;
         }
 
         .chat-info {
             flex: 1;
-            min-width: 0;
         }
 
         .chat-name {
-            font-weight: 500;
-            color: #3b4a54;
-            margin-bottom: 2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
         }
 
         .chat-last-message {
-            color: #667781;
-            font-size: 0.85em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: #666;
+            font-size: 14px;
         }
 
-        /* Main Chat Area */
-        .main-chat {
+        .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(to bottom, #e5ddd5 0%, #e5ddd5 100%);
         }
 
         .chat-header {
-            background-color: #f8f9fa;
-            padding: 15px 20px;
-            border-bottom: 1px solid #e5e5e5;
+            padding: 20px;
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
-        .messages-area {
+        .messages-container {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
-            background-image: 
-                radial-gradient(circle at 25% 25%, #ffffff 2px, transparent 2px),
-                radial-gradient(circle at 75% 75%, #ffffff 2px, transparent 2px);
-            background-size: 50px 50px;
-            background-position: 0 0, 25px 25px;
+            background: #f5f7fa;
         }
 
         .message {
-            margin-bottom: 15px;
+            margin: 10px 0;
             display: flex;
             align-items: flex-end;
+            gap: 8px;
         }
 
         .message.sent {
             justify-content: flex-end;
         }
 
-        .message.received {
-            justify-content: flex-start;
-        }
-
-        .message-content {
-            max-width: 60%;
-            padding: 10px 15px;
-            border-radius: 15px;
-            position: relative;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-
-        .message.sent .message-content {
-            background-color: #dcf8c6;
-            border-bottom-right-radius: 5px;
-        }
-
-        .message.received .message-content {
-            background-color: white;
-            border-bottom-left-radius: 5px;
-        }
-
-        .message-text {
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
             word-wrap: break-word;
-            line-height: 1.4;
+            position: relative;
         }
 
-        .message-time {
-            font-size: 0.7em;
-            color: #667781;
-            margin-top: 5px;
-            text-align: right;
+        .message.received .message-bubble {
+            background: white;
+            border-bottom-left-radius: 4px;
         }
 
-        .message-input-area {
-            background-color: #f8f9fa;
-            padding: 15px 20px;
+        .message.sent .message-bubble {
+            background: #25D366;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-actions {
+            display: flex;
+            gap: 5px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .message:hover .message-actions {
+            opacity: 1;
+        }
+
+        .action-btn {
+            background: rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 10px;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e1e8ed;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
 
         .message-input {
             flex: 1;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
+            padding: 12px 16px;
+            border: 2px solid #e1e8ed;
             border-radius: 25px;
-            outline: none;
             font-size: 14px;
+            outline: none;
             resize: none;
+            min-height: 20px;
             max-height: 100px;
         }
 
-        .send-button {
-            width: 45px;
-            height: 45px;
-            border-radius: 50%;
-            background: #25d366;
+        .message-input:focus {
+            border-color: #25D366;
+        }
+
+        .send-btn, .btn {
+            background: #25D366;
             color: white;
             border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-weight: 600;
             transition: background-color 0.2s;
         }
 
-        .send-button:hover:not(:disabled) {
-            background: #20b858;
+        .send-btn:hover, .btn:hover {
+            background: #128C7E;
         }
 
-        .send-button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .btn.secondary {
+            background: #6c757d;
         }
 
-        .message-type-selector {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 10px;
+        .btn.secondary:hover {
+            background: #5a6268;
         }
 
-        .type-btn {
-            padding: 5px 10px;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 15px;
-            cursor: pointer;
-            font-size: 12px;
-            color: #666;
-            transition: all 0.2s;
-        }
-
-        .type-btn.active {
-            background: #25d366;
-            color: white;
-            border-color: #25d366;
-        }
-
-        .empty-chat {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100%;
-            color: #667781;
-            text-align: center;
-        }
-
-        .empty-chat h3 {
-            margin-bottom: 10px;
-            font-size: 1.5em;
-        }
-
-        .status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 15px;
-            border-radius: 25px;
-            color: white;
-            font-size: 0.9em;
-            z-index: 1000;
-            transition: all 0.3s ease;
-        }
-
-        .status.success {
-            background: #25d366;
-        }
-
-        .status.error {
+        .btn.danger {
             background: #dc3545;
         }
 
-        .status.info {
-            background: #17a2b8;
+        .btn.danger:hover {
+            background: #c82333;
         }
 
-        .actions-bar {
+        .controls {
             display: flex;
-            gap: 5px;
-            margin-bottom: 10px;
+            gap: 10px;
+            margin-bottom: 15px;
         }
 
-        .action-btn {
-            padding: 6px 12px;
-            border: 1px solid #ddd;
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #25D366;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
             background: white;
-            border-radius: 12px;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+        }
+
+        .close-btn {
+            float: right;
+            font-size: 24px;
             cursor: pointer;
-            font-size: 11px;
+            color: #999;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 10px;
             color: #666;
-            transition: all 0.2s;
+            font-style: italic;
         }
 
-        .action-btn:hover {
-            background: #f5f5f5;
+        .emoji-picker {
+            display: none;
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
         }
 
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 100%;
-            }
-            
-            .main-chat {
-                display: none;
-            }
-            
-            .main-chat.mobile-active {
-                display: flex;
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                z-index: 100;
-            }
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 5px;
+        }
+
+        .emoji {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .emoji:hover {
+            background: #f0f0f0;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .attachment-btn {
+            background: #6c757d;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: white;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1001;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #28a745;
+        }
+
+        .notification.error {
+            background: #dc3545;
+        }
+
+        .notification.info {
+            background: #17a2b8;
         }
     </style>
 </head>
 <body>
-    <div id="app">
-        
-        <div id="auth-screen" class="auth-screen">
-            <div class="auth-card">
-                <h1>🚀 WhatsApp Web</h1>
-                <p>Connect your WhatsApp to get started</p>
-                
-                <div class="qr-container" id="qr-container">
-                    <div class="loading">Generating QR Code...</div>
-                </div>
-                
-                <div>
-                    <button onclick="app.createSession()">Create New Session</button>
-                    <button onclick="app.checkAuthStatus()">Check Status</button>
-                </div>
-                
-                <div style="margin-top: 20px;">
-                    <input type="text" id="session-input" placeholder="Enter Session ID" 
-                           style="padding: 10px; border-radius: 5px; border: none; margin-right: 10px; color: #333;">
-                    <button onclick="app.loadSession()">Load Session</button>
+    <div class="container">
+        <div class="header">
+            <h1>💬 WhatsApp API</h1>
+            <div class="session-info">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="sessionStatus">Disconnected</span>
+                <div class="controls">
+                    <button class="btn" onclick="showSessionModal()">Connect Session</button>
+                    <button class="btn" onclick="createSession()">New Session</button>
+                    <button class="btn secondary" onclick="reloadSession()">Reload</button>
+                    <button class="btn danger" onclick="removeSession()">Remove</button>
                 </div>
             </div>
         </div>
 
-        
-        <div id="main-app" class="container" style="display: none;">
+        <div class="main-content">
             
-            <div class="sidebar">
-                <div class="sidebar-header">
-                    <h2>Chats</h2>
-                    <div class="session-info" id="session-info">Session: Loading...</div>
-                </div>
-                
-                <div class="search-bar">
-                    <input type="text" class="search-input" placeholder="Search chats..." 
-                           oninput="app.searchChats(this.value)">
-                </div>
-                
-                <div class="chat-list" id="chat-list">
-                    <div style="padding: 20px; text-align: center; color: #667781;">
-                        Loading chats...
+            <div class="auth-screen" id="authScreen">
+                <h2>🔐 WhatsApp Authentication</h2>
+                <div id="authContent">
+                    <p>Choose how you want to connect:</p>
+                    <div class="auth-options" style="margin: 30px 0;">
+                        <button class="btn" onclick="showSessionModal()" style="margin: 0 10px 10px 0;">📱 Use Existing Session</button>
+                        <button class="btn" onclick="createSession()" style="margin: 0 10px 10px 0;">🆕 Create New Session</button>
                     </div>
+                </div>
+                <div class="qr-container hidden" id="qrContainer">
+                    <div class="loading" id="qrLoading"></div>
+                    <canvas class="qr-code hidden" id="qrCode"></canvas>
+                </div>
+                <div id="qrActions" class="hidden" style="margin-top: 15px;">
+                    <button class="btn" onclick="getQRCode()">🔄 Refresh QR Code</button>
+                    <button class="btn secondary" onclick="showAuthOptions()">← Back to Options</button>
                 </div>
             </div>
 
             
-            <div class="main-chat" id="main-chat">
-                <div class="empty-chat">
-                    <h3>👋 Welcome to WhatsApp Web</h3>
-                    <p>Select a chat to start messaging</p>
+            <div class="sidebar hidden" id="sidebar">
+                <div class="search-bar">
+                    <input type="text" class="search-input" placeholder="🔍 Search chats..." id="searchInput">
+                </div>
+                <div class="chat-list" id="chatList">
+                    
+                </div>
+            </div>
+
+            <div class="chat-area hidden" id="chatArea">
+                <div class="chat-header" id="chatHeader">
+                    <div class="chat-avatar" id="currentChatAvatar">?</div>
+                    <div class="chat-info">
+                        <div class="chat-name" id="currentChatName">Select a chat</div>
+                        <div class="chat-last-message" id="currentChatStatus">Online</div>
+                    </div>
+                    <div class="controls">
+                        <button class="btn secondary" onclick="showSendMessageModal()">📤 Send Message</button>
+                    </div>
+                </div>
+                
+                <div class="messages-container" id="messagesContainer">
+                    
+                </div>
+                
+                <div class="typing-indicator" id="typingIndicator">
+                    Someone is typing...
+                </div>
+
+                <div class="input-area">
+                    <input type="file" class="file-input" id="fileInput" accept="image/*,video/*,audio/*,.pdf,.doc,.docx">
+                    <button class="attachment-btn" onclick="document.getElementById('fileInput').click()">
+                        📎
+                    </button>
+                    <button class="attachment-btn" onclick="toggleEmojiPicker()">
+                        😀
+                    </button>
+                    <textarea class="message-input" id="messageInput" placeholder="Type a message..." rows="1"></textarea>
+                    <button class="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+
+                <div class="emoji-picker" id="emojiPicker">
+                    <div class="emoji-grid" id="emojiGrid">
+                        
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     
-    <div id="status" class="status" style="display: none;"></div>
+    <div class="modal" id="sessionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-btn" onclick="closeModal('sessionModal')">&times;</span>
+                <h3>📱 Connect to Existing Session</h3>
+            </div>
+            <div class="form-group">
+                <label for="existingSessionId">Session ID:</label>
+                <input type="text" id="existingSessionId" placeholder="Enter your existing session ID">
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    Enter the session ID from your previous connection
+                </small>
+            </div>
+            <div class="controls">
+                <button class="btn" onclick="connectExistingSession()">🔗 Connect</button>
+                <button class="btn secondary" onclick="closeModal('sessionModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
 
+    <div class="modal" id="sendMessageModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close-btn" onclick="closeModal('sendMessageModal')">&times;</span>
+                <h3>📤 Send Message</h3>
+            </div>
+            <div class="form-group">
+                <label for="sendJid">Phone Number:</label>
+                <input type="text" id="sendJid" placeholder="e.g., +1234567890 or 1234567890@s.whatsapp.net">
+                <small style="color: #666; display: block; margin-top: 5px;">
+                    Enter with country code (e.g., +1234567890) or full JID
+                </small>
+            </div>
+            <div class="form-group">
+                <label for="sendType">Message Type:</label>
+                <select id="sendType">
+                    <option value="text">📝 Text</option>
+                    <option value="image">📷 Image URL</option>
+                    <option value="video">🎥 Video URL</option>
+                    <option value="audio">🎵 Audio URL</option>
+                    <option value="document">📄 Document URL</option>
+                    <option value="sticker">🎭 Sticker URL</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="sendContent">Content:</label>
+                <textarea id="sendContent" rows="4" placeholder="Message text or media URL"></textarea>
+            </div>
+            <div class="controls">
+                <button class="btn" onclick="sendCustomMessage()">📤 Send</button>
+                <button class="btn secondary" onclick="closeModal('sendMessageModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script>
-        class WhatsAppApp {
-            constructor() {
-                this.baseUrl = 'http://192.168.1.68:3000/api';
-                this.sessionId = null;
-                this.currentChat = null;
-                this.chats = [];
-                this.messages = new Map();
-                this.messageTypes = ['text', 'image', 'video', 'audio', 'document'];
-                this.selectedMessageType = 'text';
-                this.init();
-            }
-
-            init() {
-                // Try to load session from localStorage
-                const savedSession = localStorage.getItem('whatsapp_session_id');
-                if (savedSession) {
-                    document.getElementById('session-input').value = savedSession;
-                    this.loadSession();
-                }
-            }
-
-            showStatus(message, type = 'info') {
-                const statusEl = document.getElementById('status');
-                statusEl.textContent = message;
-                statusEl.className = `status ${type}`;
-                statusEl.style.display = 'block';
-                
-                setTimeout(() => {
-                    statusEl.style.display = 'none';
-                }, 3000);
-            }
-
-            async apiCall(endpoint, options = {}) {
-                try {
-                    const config = {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...(this.sessionId && {'X-Session-ID': this.sessionId})
-                        },
-                        ...options
-                    };
-
-                    if (config.body && typeof config.body === 'object') {
-                        config.body = JSON.stringify(config.body);
-                    }
-
-                    const response = await fetch(`${this.baseUrl}${endpoint}`, config);
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(data.error || `HTTP ${response.status}`);
-                    }
-
-                    return data;
-                } catch (error) {
-                    console.error('API call failed:', error);
-                    this.showStatus(error.message, 'error');
-                    throw error;
-                }
-            }
-
-            async createSession() {
-                try {
-                    this.showStatus('Creating new session...', 'info');
-                    const response = await this.apiCall('/auth/create', {
-                        method: 'POST'
-                    });
-                    
-                    this.sessionId = response.sessionId;
-                    localStorage.setItem('whatsapp_session_id', this.sessionId);
-                    document.getElementById('session-input').value = this.sessionId;
-                    
-                    this.showStatus('Session created! Generating QR code...', 'success');
-                    this.pollForQR();
-                } catch (error) {
-                    this.showStatus('Failed to create session', 'error');
-                }
-            }
-
-            async loadSession() {
-                const sessionInput = document.getElementById('session-input');
-                const sessionId = sessionInput.value.trim();
-                
-                if (!sessionId) {
-                    this.showStatus('Please enter a session ID', 'error');
-                    return;
-                }
-
-                this.sessionId = sessionId;
-                localStorage.setItem('whatsapp_session_id', sessionId);
-                this.checkAuthStatus();
-            }
-
-            async checkAuthStatus() {
-                if (!this.sessionId) {
-                    this.showStatus('No session ID provided', 'error');
-                    return;
-                }
-
-                try {
-                    const response = await this.apiCall('/auth/status');
-                    
-                    if (response.authenticated) {
-                        this.showMainApp();
-                    } else {
-                        this.pollForQR();
-                    }
-                } catch (error) {
-                    this.showStatus('Failed to check auth status', 'error');
-                }
-            }
-
-            async pollForQR() {
-                const maxAttempts = 60; // 5 minutes with 5-second intervals
-                let attempts = 0;
-
-                const poll = async () => {
-                    if (attempts >= maxAttempts) {
-                        this.showStatus('QR code timeout. Please try again.', 'error');
-                        return;
-                    }
-
-                    try {
-                        const response = await this.apiCall('/auth/qr');
-                        
-                        if (response.success) {
-                            this.showMainApp();
-                            return;
-                        }
-                        
-                        if (response.qr) {
-                            this.displayQR(response.qr);
-                        }
-                        
-                        attempts++;
-                        setTimeout(poll, 5000);
-                        
-                    } catch (error) {
-                        if (error.message.includes('404')) {
-                            // QR not ready yet, continue polling
-                            attempts++;
-                            setTimeout(poll, 2000);
-                        } else {
-                            this.showStatus('Failed to get QR code', 'error');
-                        }
-                    }
-                };
-
-                poll();
-            }
-
-            displayQR(qrData) {
-                const qrContainer = document.getElementById('qr-container');
-                qrContainer.innerHTML = `
-                    <div style="text-align: center;">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}" 
-                             alt="QR Code" class="qr-code">
-                        <p style="margin-top: 10px; color: #666;">Scan this QR code with WhatsApp</p>
-                    </div>
-                `;
-            }
-
-            showMainApp() {
-                document.getElementById('auth-screen').style.display = 'none';
-                document.getElementById('main-app').style.display = 'flex';
-                document.getElementById('session-info').textContent = `Session: ${this.sessionId}`;
-                
-                this.showStatus('Connected successfully!', 'success');
-                this.loadChats();
-            }
-
-            async loadChats() {
-                try {
-                    const chats = await this.apiCall('/chats');
-                    this.chats = chats;
-                    this.renderChats();
-                } catch (error) {
-                    this.showStatus('Failed to load chats', 'error');
-                }
-            }
-
-            renderChats() {
-                const chatList = document.getElementById('chat-list');
-                
-                if (this.chats.length === 0) {
-                    chatList.innerHTML = `
-                        <div style="padding: 20px; text-align: center; color: #667781;">
-                            No chats available
-                        </div>
-                    `;
-                    return;
-                }
-
-                chatList.innerHTML = this.chats.map(chat => {
-                    const name = this.getChatName(chat);
-                    const avatar = name.charAt(0).toUpperCase();
-                    
-                    return `
-                        <div class="chat-item" onclick="app.selectChat('${chat.id}')">
-                            <div class="chat-avatar">${avatar}</div>
-                            <div class="chat-info">
-                                <div class="chat-name">${name}</div>
-                                <div class="chat-last-message">${chat.lastMessage || 'No messages yet'}</div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            getChatName(chat) {
-                if (chat.name) return chat.name;
-                if (chat.id.includes('@g.us')) return 'Group Chat';
-                return chat.id.split('@')[0];
-            }
-
-            selectChat(chatId) {
-                // Remove active class from previous selection
-                document.querySelectorAll('.chat-item').forEach(item => {
-                    item.classList.remove('active');
-                });
-                
-                // Add active class to selected chat
-                event.target.closest('.chat-item').classList.add('active');
-                
-                const chat = this.chats.find(c => c.id === chatId);
-                if (!chat) return;
-
-                this.currentChat = chat;
-                this.renderChatWindow(chat);
-                
-                // Mobile responsiveness
-                if (window.innerWidth <= 768) {
-                    document.getElementById('main-chat').classList.add('mobile-active');
-                }
-            }
-
-            renderChatWindow(chat) {
-                const mainChat = document.getElementById('main-chat');
-                const chatName = this.getChatName(chat);
-                
-                mainChat.innerHTML = `
-                    <div class="chat-header">
-                        <div class="chat-avatar" style="margin-right: 15px;">${chatName.charAt(0).toUpperCase()}</div>
-                        <div>
-                            <div class="chat-name" style="font-weight: 500; font-size: 1.1em;">${chatName}</div>
-                            <div style="font-size: 0.8em; color: #667781;">${chat.id}</div>
-                        </div>
-                        <div style="flex: 1;"></div>
-                        <button onclick="app.goBackToChats()" style="display: none;" id="back-btn">← Back</button>
-                    </div>
-                    
-                    <div class="messages-area" id="messages-area">
-                        <div style="text-align: center; padding: 20px; color: #667781;">
-                            Loading messages...
-                        </div>
-                    </div>
-                    
-                    <div class="message-input-area">
-                        <div style="flex: 1;">
-                            <div class="message-type-selector">
-                                ${this.messageTypes.map(type => `
-                                    <span class="type-btn ${type === this.selectedMessageType ? 'active' : ''}" 
-                                          onclick="app.selectMessageType('${type}')">${type}</span>
-                                `).join('')}
-                            </div>
-                            
-                            <div class="actions-bar">
-                                <span class="action-btn" onclick="app.showReplyInterface()">Reply</span>
-                                <span class="action-btn" onclick="app.showReactionInterface()">React</span>
-                                <span class="action-btn" onclick="app.refreshMessages()">Refresh</span>
-                            </div>
-                            
-                            <textarea class="message-input" id="message-input" 
-                                      placeholder="Type a message..." 
-                                      onkeypress="app.handleKeyPress(event)"></textarea>
-                        </div>
-                        <button class="send-button" onclick="app.sendMessage()">
-                            <span>📤</span>
-                        </button>
-                    </div>
-                `;
-
-                // Show back button on mobile
-                if (window.innerWidth <= 768) {
-                    document.getElementById('back-btn').style.display = 'block';
-                }
-
-                this.loadMessages(chat.id);
-            }
-
-            goBackToChats() {
-                document.getElementById('main-chat').classList.remove('mobile-active');
-            }
-
-            async loadMessages(chatId) {
-                // For now, show empty state since the backend doesn't have message history endpoint
-                const messagesArea = document.getElementById('messages-area');
-                messagesArea.innerHTML = `
-                    <div style="text-align: center; padding: 20px; color: #667781;">
-                        <p>💬 No messages loaded</p>
-                        <p style="font-size: 0.9em; margin-top: 10px;">Messages will appear here as you send and receive them</p>
-                    </div>
-                `;
-            }
-
-            selectMessageType(type) {
-                this.selectedMessageType = type;
-                
-                document.querySelectorAll('.type-btn').forEach(btn => {
-                    btn.classList.remove('active');
-                });
-                
-                event.target.classList.add('active');
-                
-                // Update placeholder based on type
-                const input = document.getElementById('message-input');
-                const placeholders = {
-                    text: 'Type a message...',
-                    image: 'Enter image URL...',
-                    video: 'Enter video URL...',
-                    audio: 'Enter audio URL...',
-                    document: 'Enter document URL...'
-                };
-                
-                input.placeholder = placeholders[type] || 'Type a message...';
-            }
-
-            handleKeyPress(event) {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    this.sendMessage();
-                }
-            }
-
-            async sendMessage() {
-                const input = document.getElementById('message-input');
-                const content = input.value.trim();
-                
-                if (!content || !this.currentChat) return;
-
-                try {
-                    const sendButton = document.querySelector('.send-button');
-                    sendButton.disabled = true;
-                    
-                    const payload = {
-                        jid: this.currentChat.id,
-                        type: this.selectedMessageType,
-                        content: content
-                    };
-
-                    // Add fileName for document type
-                    if (this.selectedMessageType === 'document') {
-                        payload.options = {
-                            fileName: content.split('/').pop() || 'document.pdf'
-                        };
-                    }
-
-                    await this.apiCall('/message/send', {
-                        method: 'POST',
-                        body: payload
-                    });
-
-                    // Add message to UI immediately
-                    this.addMessageToUI({
-                        id: Date.now(),
-                        content: content,
-                        type: this.selectedMessageType,
-                        sent: true,
-                        timestamp: new Date()
-                    });
-
-                    input.value = '';
-                    this.showStatus('Message sent!', 'success');
-                    
-                } catch (error) {
-                    this.showStatus('Failed to send message', 'error');
-                } finally {
-                    document.querySelector('.send-button').disabled = false;
-                }
-            }
-
-            addMessageToUI(message) {
-                const messagesArea = document.getElementById('messages-area');
-                
-                // If this is the first message, clear the empty state
-                if (messagesArea.innerHTML.includes('No messages loaded')) {
-                    messagesArea.innerHTML = '';
-                }
-
-                const messageEl = document.createElement('div');
-                messageEl.className = `message ${message.sent ? 'sent' : 'received'}`;
-                messageEl.innerHTML = `
-                    <div class="message-content">
-                        <div class="message-text">${this.formatMessageContent(message)}</div>
-                        <div class="message-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
-                    </div>
-                `;
-
-                messagesArea.appendChild(messageEl);
-                messagesArea.scrollTop = messagesArea.scrollHeight;
-            }
-
-            formatMessageContent(message) {
-                switch (message.type) {
-                    case 'image':
-                        return `<img src="${message.content}" alt="Image" style="max-width: 100%; border-radius: 8px;">`;
-                    case 'video':
-                        return `<video controls style="max-width: 100%; border-radius: 8px;"><source src="${message.content}"></video>`;
-                    case 'audio':
-                        return `<audio controls style="width: 100%;"><source src="${message.content}"></audio>`;
-                    case 'document':
-                        return `📄 <a href="${message.content}" target="_blank">Document</a>`;
-                    default:
-                        return message.content;
-                }
-            }
-
-            showReplyInterface() {
-                // Simple prompt for demo - in real app this would be more sophisticated
-                const messageId = prompt('Enter message ID to reply to:');
-                if (!messageId) return;
-
-                const content = prompt('Enter reply content:');
-                if (!content) return;
-
-                this.replyToMessage(messageId, content);
-            }
-
-            async replyToMessage(quotedMessageId, content) {
-                try {
-                    await this.apiCall('/message/reply', {
-                        method: 'POST',
-                        body: {
-                            jid: this.currentChat.id,
-                            content: content,
-                            quotedMessageId: quotedMessageId,
-                            type: 'text'
-                        }
-                    });
-
-                    this.showStatus('Reply sent!', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to send reply', 'error');
-                }
-            }
-
-            showReactionInterface() {
-                const messageId = prompt('Enter message ID to react to:');
-                if (!messageId) return;
-
-                const emoji = prompt('Enter emoji reaction:');
-                if (!emoji) return;
-
-                this.reactToMessage(messageId, emoji);
-            }
-
-            async reactToMessage(messageId, emoji) {
-                try {
-                    await this.apiCall('/message/react', {
-                        method: 'POST',
-                        body: {
-                            jid: this.currentChat.id,
-                            messageId: messageId,
-                            emoji: emoji
-                        }
-                    });
-
-                    this.showStatus('Reaction sent!', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to send reaction', 'error');
-                }
-            }
-
-            refreshMessages() {
-                this.loadMessages(this.currentChat.id);
-                this.showStatus('Messages refreshed', 'info');
-            }
-
-            searchChats(query) {
-                const chatItems = document.querySelectorAll('.chat-item');
-                const searchQuery = query.toLowerCase();
-
-                chatItems.forEach(item => {
-                    const chatName = item.querySelector('.chat-name').textContent.toLowerCase();
-                    const chatMessage = item.querySelector('.chat-last-message').textContent.toLowerCase();
-                    
-                    if (chatName.includes(searchQuery) || chatMessage.includes(searchQuery)) {
-                        item.style.display = 'flex';
-                    } else {
-                        item.style.display = 'none';
-                    }
-                });
-            }
-
-            async deleteMessage() {
-                const messageId = prompt('Enter message ID to delete:');
-                if (!messageId) return;
-
-                try {
-                    await this.apiCall('/message/delete', {
-                        method: 'POST',
-                        body: {
-                            jid: this.currentChat.id,
-                            messageId: messageId,
-                            fromMe: true
-                        }
-                    });
-
-                    this.showStatus('Message deleted!', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to delete message', 'error');
-                }
-            }
-
-            async editMessage() {
-                const messageId = prompt('Enter message ID to edit:');
-                if (!messageId) return;
-
-                const newText = prompt('Enter new message text:');
-                if (!newText) return;
-
-                try {
-                    await this.apiCall('/message/edit', {
-                        method: 'POST',
-                        body: {
-                            jid: this.currentChat.id,
-                            messageId: messageId,
-                            newText: newText
-                        }
-                    });
-
-                    this.showStatus('Message edited!', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to edit message', 'error');
-                }
-            }
-
-            async forwardMessage() {
-                const messageKey = prompt('Enter message key (as JSON string):');
-                if (!messageKey) return;
-
-                const targetJid = prompt('Enter target chat JID:');
-                if (!targetJid) return;
-
-                try {
-                    const message = {
-                        key: JSON.parse(messageKey)
-                    };
-
-                    await this.apiCall('/message/forward', {
-                        method: 'POST',
-                        body: {
-                            to: targetJid,
-                            message: message
-                        }
-                    });
-
-                    this.showStatus('Message forwarded!', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to forward message', 'error');
-                }
-            }
-
-            async reloadSession() {
-                try {
-                    this.showStatus('Reloading session...', 'info');
-                    
-                    await this.apiCall('/auth/reload', {
-                        method: 'POST',
-                        body: {
-                            sessionId: this.sessionId
-                        }
-                    });
-
-                    this.showStatus('Session reloaded successfully!', 'success');
-                    setTimeout(() => this.loadChats(), 2000);
-                } catch (error) {
-                    this.showStatus('Failed to reload session', 'error');
-                }
-            }
-
-            async removeSession() {
-                if (!confirm('Are you sure you want to remove this session?')) {
-                    return;
-                }
-
-                try {
-                    await this.apiCall('/auth/remove', {
-                        method: 'DELETE',
-                        body: {
-                            sessionId: this.sessionId
-                        }
-                    });
-
-                    localStorage.removeItem('whatsapp_session_id');
-                    this.sessionId = null;
-                    this.currentChat = null;
-                    
-                    // Go back to auth screen
-                    document.getElementById('main-app').style.display = 'none';
-                    document.getElementById('auth-screen').style.display = 'flex';
-                    document.getElementById('session-input').value = '';
-                    
-                    this.showStatus('Session removed successfully', 'success');
-                } catch (error) {
-                    this.showStatus('Failed to remove session', 'error');
-                }
-            }
-
-            // Auto-refresh functionality
-            startAutoRefresh() {
-                // Refresh chats every 30 seconds
-                this.chatRefreshInterval = setInterval(() => {
-                    if (this.sessionId && document.getElementById('main-app').style.display !== 'none') {
-                        this.loadChats();
-                    }
-                }, 30000);
-
-                // Check auth status every 5 minutes
-                this.authCheckInterval = setInterval(() => {
-                    if (this.sessionId) {
-                        this.checkAuthStatus();
-                    }
-                }, 300000);
-            }
-
-            stopAutoRefresh() {
-                if (this.chatRefreshInterval) {
-                    clearInterval(this.chatRefreshInterval);
-                }
-                if (this.authCheckInterval) {
-                    clearInterval(this.authCheckInterval);
-                }
-            }
-
-            // File upload simulation
-            async uploadFile(file, type) {
-                // In a real app, you'd upload to your server and get a URL back
-                // For demo purposes, we'll use a placeholder
-                return `https://example.com/uploads/${file.name}`;
-            }
-
-            // Initialize app when page loads
-            initializeApp() {
-                this.startAutoRefresh();
-                
-                // Handle page visibility changes
-                document.addEventListener('visibilitychange', () => {
-                    if (document.hidden) {
-                        this.stopAutoRefresh();
-                    } else {
-                        this.startAutoRefresh();
-                    }
-                });
-
-                // Handle window resize for mobile responsiveness
-                window.addEventListener('resize', () => {
-                    if (window.innerWidth > 768) {
-                        document.getElementById('main-chat').classList.remove('mobile-active');
-                    }
-                });
-            }
-        }
-
-        // Initialize the app
-        const app = new WhatsAppApp();
+        // Configuration
+        const API_BASE = 'http://192.168.1.68:3000/api';
         
-        // Start the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            app.initializeApp();
-        });
+        // Global state
+        let currentSession = null;
+        let currentChat = null;
+        let chats = [];
+        let isAuthenticated = false;
+        let messagePollingInterval = null;
 
-        // Enhanced UI interactions
+        // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Ctrl/Cmd + R to reload session
-                if ((e.ctrlKey || e.metaKey) && e.key === 'r' && app.sessionId) {
-                    e.preventDefault();
-                    app.reloadSession();
-                }
-                
-                // Escape to go back on mobile
-                if (e.key === 'Escape' && window.innerWidth <= 768) {
-                    app.goBackToChats();
-                }
-            });
-
-            // Add context menu for advanced actions
-            document.addEventListener('contextmenu', function(e) {
-                if (e.target.closest('.message-content')) {
-                    e.preventDefault();
-                    showMessageContextMenu(e);
-                }
-            });
+            setupEventListeners();
+            generateEmojiPicker();
+            
+            // Try to restore session from localStorage
+            const savedSession = localStorage.getItem('whatsapp_session');
+            if (savedSession) {
+                currentSession = savedSession;
+                updateSessionDisplay();
+                checkAuthStatus().then(authenticated => {
+                    if (authenticated) {
+                        showChatInterface();
+                        updateStatus('Connected', true);
+                        loadChats();
+                        startMessagePolling();
+                    } else {
+                        showAuthScreen();
+                        updateStatus('Session Found - Reconnect Required', false);
+                        showNotification('Previous session found. Click "Connect Session" to reconnect.', 'info');
+                    }
+                });
+            }
         });
 
-        function showMessageContextMenu(e) {
-            // Remove existing context menu
-            const existingMenu = document.getElementById('context-menu');
-            if (existingMenu) {
-                existingMenu.remove();
+        function setupEventListeners() {
+            // Message input auto-resize
+            const messageInput = document.getElementById('messageInput');
+            messageInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
+            // Send message on Enter
+            messageInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // File input change
+            document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+            // Search chats
+            document.getElementById('searchInput').addEventListener('input', filterChats);
+        }
+
+        function generateEmojiPicker() {
+            const emojis = ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'];
+            const emojiGrid = document.getElementById('emojiGrid');
+            emojiGrid.innerHTML = emojis.map(emoji => 
+                `<div class="emoji" onclick="insertEmoji('${emoji}')">${emoji}</div>`
+            ).join('');
+        }
+
+        function insertEmoji(emoji) {
+            const input = document.getElementById('messageInput');
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const text = input.value;
+            input.value = text.substring(0, start) + emoji + text.substring(end);
+            input.selectionStart = input.selectionEnd = start + emoji.length;
+            input.focus();
+            document.getElementById('emojiPicker').style.display = 'none';
+        }
+
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // API Functions
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE}${endpoint}`;
+            const config = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(currentSession && { 'x-session-id': currentSession })
+                },
+                ...options
+            };
+
+            if (config.body && typeof config.body === 'object') {
+                config.body = JSON.stringify(config.body);
             }
 
-            // Create context menu
-            const menu = document.createElement('div');
-            menu.id = 'context-menu';
-            menu.style.cssText = `
-                position: fixed;
-                top: ${e.clientY}px;
-                left: ${e.clientX}px;
-                background: white;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                z-index: 1000;
-                min-width: 150px;
-            `;
-
-            const menuItems = [
-                { text: 'Reply', action: () => app.showReplyInterface() },
-                { text: 'Forward', action: () => app.forwardMessage() },
-                { text: 'React', action: () => app.showReactionInterface() },
-                { text: 'Delete', action: () => app.deleteMessage() },
-                { text: 'Edit', action: () => app.editMessage() }
-            ];
-
-            menuItems.forEach(item => {
-                const menuItem = document.createElement('div');
-                menuItem.style.cssText = `
-                    padding: 10px 15px;
-                    cursor: pointer;
-                    border-bottom: 1px solid #f0f0f0;
-                    transition: background-color 0.2s;
-                `;
-                menuItem.textContent = item.text;
-                
-                menuItem.addEventListener('mouseenter', () => {
-                    menuItem.style.backgroundColor = '#f5f5f5';
-                });
-                
-                menuItem.addEventListener('mouseleave', () => {
-                    menuItem.style.backgroundColor = 'white';
-                });
-                
-                menuItem.addEventListener('click', () => {
-                    item.action();
-                    menu.remove();
-                });
-                
-                menu.appendChild(menuItem);
-            });
-
-            document.body.appendChild(menu);
-
-            // Remove menu when clicking elsewhere
-            setTimeout(() => {
-                document.addEventListener('click', function closeMenu() {
-                    menu.remove();
-                    document.removeEventListener('click', closeMenu);
-                });
-            }, 0);
-        }
-
-        // Add some utility functions for better UX
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        function isValidUrl(string) {
             try {
-                new URL(string);
-                return true;
-            } catch (_) {
+                const response = await fetch(url, config);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                
+                return data;
+            } catch (error) {
+                console.error(`API Error (${endpoint}):`, error);
+                showNotification(error.message, 'error');
+                throw error;
+            }
+        }
+
+        async function connectExistingSession() {
+            const sessionId = document.getElementById('existingSessionId').value.trim();
+            
+            if (!sessionId) {
+                showNotification('Please enter a session ID', 'error');
+                return;
+            }
+
+            try {
+                showNotification('Connecting to existing session...', 'info');
+                
+                // Set the session ID
+                currentSession = sessionId;
+                localStorage.setItem('whatsapp_session', currentSession);
+                updateSessionDisplay();
+                
+                // Check if session is already authenticated
+                const isAuth = await checkAuthStatus();
+                
+                if (isAuth) {
+                    // Session is already authenticated
+                    closeModal('sessionModal');
+                    showChatInterface();
+                    updateStatus('Connected', true);
+                    await loadChats();
+                    startMessagePolling();
+                    showNotification('Connected to existing session!', 'success');
+                } else {
+                    // Session exists but needs QR code authentication
+                    closeModal('sessionModal');
+                    showQRScreen();
+                    updateStatus('Session Found - Scan QR Code', false);
+                    await getQRCode();
+                }
+                
+            } catch (error) {
+                showNotification('Failed to connect to session. Session may not exist.', 'error');
+                currentSession = null;
+                localStorage.removeItem('whatsapp_session');
+                updateStatus('Disconnected', false);
+            }
+        }
+
+        async function createSession() {
+            try {
+                showNotification('Creating new session...', 'info');
+                const response = await apiRequest('/auth/create', { method: 'POST' });
+                currentSession = response.sessionId;
+                localStorage.setItem('whatsapp_session', currentSession);
+                updateSessionDisplay();
+                showNotification(`Session created! ID: ${response.sessionId}`, 'success');
+                
+                // Show QR code
+                showQRScreen();
+                await getQRCode();
+            } catch (error) {
+                showNotification('Failed to create session', 'error');
+            }
+        }
+
+        async function removeSession() {
+            if (!currentSession) {
+                showNotification('No active session', 'error');
+                return;
+            }
+
+            try {
+                await apiRequest('/auth/remove', {
+                    method: 'DELETE',
+                    body: { sessionId: currentSession }
+                });
+                
+                currentSession = null;
+                isAuthenticated = false;
+                localStorage.removeItem('whatsapp_session');
+                
+                // Reset UI
+                showAuthScreen();
+                updateStatus('Disconnected', false);
+                showNotification('Session removed successfully', 'success');
+                
+                if (messagePollingInterval) {
+                    clearInterval(messagePollingInterval);
+                    messagePollingInterval = null;
+                }
+            } catch (error) {
+                showNotification('Failed to remove session', 'error');
+            }
+        }
+
+        async function reloadSession() {
+            if (!currentSession) {
+                showNotification('No active session', 'error');
+                return;
+            }
+
+            try {
+                showNotification('Reloading session...', 'info');
+                await apiRequest('/auth/reload', {
+                    method: 'POST',
+                    body: { sessionId: currentSession }
+                });
+                showNotification('Session reloaded successfully', 'success');
+                
+                // Check if we need QR code or if already authenticated
+                const isAuth = await checkAuthStatus();
+                if (isAuth) {
+                    showChatInterface();
+                    updateStatus('Connected', true);
+                    await loadChats();
+                    startMessagePolling();
+                } else {
+                    showQRScreen();
+                    await getQRCode();
+                }
+            } catch (error) {
+                showNotification('Failed to reload session', 'error');
+            }
+        }
+
+        async function getQRCode() {
+            if (!currentSession) {
+                showNotification('No active session. Create one first.', 'error');
+                return;
+            }
+
+            const qrLoading = document.getElementById('qrLoading');
+            const qrCode = document.getElementById('qrCode');
+            
+            qrLoading.classList.remove('hidden');
+            qrCode.classList.add('hidden');
+
+            try {
+                const response = await apiRequest('/auth/qr');
+                
+                if (response.success) {
+                    // Already authenticated
+                    isAuthenticated = true;
+                    showChatInterface();
+                    updateStatus('Connected', true);
+                    await loadChats();
+                    startMessagePolling();
+                    showNotification('Already authenticated!', 'success');
+                } else if (response.qr) {
+                    // Display QR code
+                    displayQRCode(response.qr);
+                    updateStatus('Scan QR Code to Connect', false);
+                    
+                    // Start checking auth status
+                    startAuthCheck();
+                }
+            } catch (error) {
+                qrLoading.classList.add('hidden');
+                if (error.message.includes('QR not yet available')) {
+                    showNotification('QR code not ready yet, retrying...', 'info');
+                    setTimeout(getQRCode, 2000);
+                } else {
+                    showNotification('Failed to get QR code: ' + error.message, 'error');
+                }
+            }
+        }
+
+        function displayQRCode(qrData) {
+            const qrLoading = document.getElementById('qrLoading');
+            const qrCode = document.getElementById('qrCode');
+            
+            const qr = qrcode(0, 'M');
+            qr.addData(qrData);
+            qr.make();
+            
+            const canvas = qrCode;
+            const ctx = canvas.getContext('2d');
+            const size = 256;
+            canvas.width = size;
+            canvas.height = size;
+            
+            const modules = qr.getModuleCount();
+            const cellSize = size / modules;
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#000000';
+            
+            for (let row = 0; row < modules; row++) {
+                for (let col = 0; col < modules; col++) {
+                    if (qr.isDark(row, col)) {
+                        ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+            
+            qrLoading.classList.add('hidden');
+            qrCode.classList.remove('hidden');
+        }
+
+        function startAuthCheck() {
+            const authCheckInterval = setInterval(async () => {
+                try {
+                    const authenticated = await checkAuthStatus();
+                    if (authenticated) {
+                        clearInterval(authCheckInterval);
+                        showChatInterface();
+                        updateStatus('Connected', true);
+                        await loadChats();
+                        startMessagePolling();
+                        showNotification('Successfully authenticated!', 'success');
+                    }
+                } catch (error) {
+                    // Continue checking
+                    console.log('Auth check failed, retrying...');
+                }
+            }, 3000);
+
+            // Stop checking after 2 minutes
+            setTimeout(() => {
+                clearInterval(authCheckInterval);
+            }, 120000);
+        }
+
+        async function checkAuthStatus() {
+            if (!currentSession) return;
+
+            try {
+                const response = await apiRequest('/auth/status');
+                isAuthenticated = response.authenticated;
+                return isAuthenticated;
+            } catch (error) {
+                isAuthenticated = false;
                 return false;
             }
         }
 
-        // Enhanced error handling
-        window.addEventListener('unhandledrejection', function(event) {
-            console.error('Unhandled promise rejection:', event.reason);
-            app.showStatus('An unexpected error occurred', 'error');
-        });
+        async function loadChats() {
+            try {
+                const response = await apiRequest('/chats');
+                chats = response || [];
+                renderChats();
+            } catch (error) {
+                console.error('Failed to load chats:', error);
+                chats = [];
+                renderChats();
+            }
+        }
 
-        window.addEventListener('error', function(event) {
-            console.error('JavaScript error:', event.error);
-            app.showStatus('An unexpected error occurred', 'error');
-        });
-    </script>
-</body>
-</html>
-
+        function renderChats() {
+            const chatList = document.getElementById('chatList');
             
+            if (chats.length === 0) {
+                chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">No chats found</div>';
+                return;
+            }
+
+            chatList.innerHTML = chats.map(chat => {
+                const name = chat.name || chat.id?.replace('@s.whatsapp.net', '') || 'Unknown';
+                const avatar = name.charAt(0).toUpperCase();
+                const lastMessage = 'Click to start messaging';
+                
+                return `
+                    <div class="chat-item ${currentChat?.id === chat.id ? 'active' : ''}" 
+                         onclick="selectChat('${chat.id}', '${name}')">
+                        <div class="chat-avatar">${avatar}</div>
+                        <div class="chat-info">
+                            <div class="chat-name">${name}</div>
+                            <div class="chat-last-message">${lastMessage}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterChats() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const chatItems = document.querySelectorAll('.chat-item');
+            
+            chatItems.forEach(item => {
+                const name = item.querySelector('.chat-name').textContent.toLowerCase();
+                item.style.display = name.includes(query) ? 'flex' : 'none';
+            });
+        }
+
+        function selectChat(jid, name) {
+            currentChat = { id: jid, name: name };
+            
+            // Update active chat
+            document.querySelectorAll('.chat-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Update chat header
+            document.getElementById('currentChatAvatar').textContent = name.charAt(0).toUpperCase();
+            document.getElementById('currentChatName').textContent = name;
+            document.getElementById('currentChatStatus').textContent = 'Online';
+            
+            // Clear messages (in a real app, you'd load chat history here)
+            document.getElementById('messagesContainer').innerHTML = 
+                '<div style="text-align: center; padding: 20px; color: #666;">Start a conversation with ' + name + '</div>';
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            
+            if (!content || !currentChat) {
+                if (!currentChat) {
+                    showNotification('Please select a chat first', 'error');
+                }
+                return;
+            }
+
+            try {
+                await apiRequest('/message/send', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        type: 'text',
+                        content: content
+                    }
+                });
+
+                // Add message to UI
+                addMessageToChat({
+                    content: content,
+                    type: 'text',
+                    fromMe: true,
+                    timestamp: new Date()
+                });
+
+                input.value = '';
+                input.style.height = 'auto';
+                showNotification('Message sent!', 'success');
+                
+            } catch (error) {
+                showNotification('Failed to send message', 'error');
+            }
+        }
+
+        function addMessageToChat(message) {
+            const container = document.getElementById('messagesContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${message.fromMe ? 'sent' : 'received'}`;
+            
+            const time = new Date(message.timestamp).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            
+            messageDiv.innerHTML = `
+                <div class="message-bubble">
+                    ${formatMessageContent(message)}
+                    <div style="font-size: 11px; opacity: 0.7; margin-top: 5px;">
+                        ${time}
+                    </div>
+                </div>
+                <div class="message-actions">
+                    <button class="action-btn" onclick="replyToMessage('${message.id || Date.now()}')" title="Reply">↩️</button>
+                    <button class="action-btn" onclick="reactToMessage('${message.id || Date.now()}')" title="React">❤️</button>
+                    ${message.fromMe ? `<button class="action-btn" onclick="deleteMessage('${message.id || Date.now()}')" title="Delete">🗑️</button>` : ''}
+                    ${message.fromMe ? `<button class="action-btn" onclick="editMessage('${message.id || Date.now()}')" title="Edit">✏️</button>` : ''}
+                </div>
+            `;
+            
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function formatMessageContent(message) {
+            switch (message.type) {
+                case 'text':
+                    return `<div>${escapeHtml(message.content)}</div>`;
+                case 'image':
+                    return `<div>📷 Image</div><div style="font-size: 12px; color: #666;">${message.content}</div>`;
+                case 'video':
+                    return `<div>🎥 Video</div><div style="font-size: 12px; color: #666;">${message.content}</div>`;
+                case 'audio':
+                    return `<div>🎵 Audio</div><div style="font-size: 12px; color: #666;">${message.content}</div>`;
+                case 'document':
+                    return `<div>📄 Document</div><div style="font-size: 12px; color: #666;">${message.content}</div>`;
+                case 'sticker':
+                    return `<div>🎭 Sticker</div>`;
+                default:
+                    return `<div>${escapeHtml(message.content || 'Message')}</div>`;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function replyToMessage(messageId) {
+            const content = prompt('Enter your reply:');
+            if (!content || !currentChat) return;
+
+            try {
+                await apiRequest('/message/reply', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        content: content,
+                        quotedMessageId: messageId,
+                        type: 'text'
+                    }
+                });
+
+                addMessageToChat({
+                    content: `↩️ ${content}`,
+                    type: 'text',
+                    fromMe: true,
+                    timestamp: new Date(),
+                    id: Date.now()
+                });
+
+                showNotification('Reply sent!', 'success');
+            } catch (error) {
+                showNotification('Failed to send reply', 'error');
+            }
+        }
+
+        async function reactToMessage(messageId) {
+            const emoji = prompt('Enter emoji reaction:', '👍');
+            if (!emoji || !currentChat) return;
+
+            try {
+                await apiRequest('/message/react', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        messageId: messageId,
+                        emoji: emoji
+                    }
+                });
+
+                showNotification(`Reacted with ${emoji}`, 'success');
+            } catch (error) {
+                showNotification('Failed to add reaction', 'error');
+            }
+        }
+
+        async function deleteMessage(messageId) {
+            if (!confirm('Are you sure you want to delete this message?') || !currentChat) return;
+
+            try {
+                await apiRequest('/message/delete', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        messageId: messageId,
+                        fromMe: true
+                    }
+                });
+
+                // Remove message from UI
+                const messages = document.querySelectorAll('.message');
+                messages.forEach(msg => {
+                    const actionBtn = msg.querySelector(`[onclick*="${messageId}"]`);
+                    if (actionBtn) {
+                        msg.remove();
+                    }
+                });
+
+                showNotification('Message deleted', 'success');
+            } catch (error) {
+                showNotification('Failed to delete message', 'error');
+            }
+        }
+
+        async function editMessage(messageId) {
+            const newText = prompt('Edit message:');
+            if (!newText || !currentChat) return;
+
+            try {
+                await apiRequest('/message/edit', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        messageId: messageId,
+                        newText: newText
+                    }
+                });
+
+                // Update message in UI
+                const messages = document.querySelectorAll('.message');
+                messages.forEach(msg => {
+                    const actionBtn = msg.querySelector(`[onclick*="${messageId}"]`);
+                    if (actionBtn) {
+                        const bubble = msg.querySelector('.message-bubble div');
+                        if (bubble) {
+                            bubble.innerHTML = `${escapeHtml(newText)} <em>(edited)</em>`;
+                        }
+                    }
+                });
+
+                showNotification('Message edited', 'success');
+            } catch (error) {
+                showNotification('Failed to edit message', 'error');
+            }
+        }
+
+        async function forwardMessage(messageId, message) {
+            const targetJid = prompt('Enter target JID (phone@s.whatsapp.net):');
+            if (!targetJid) return;
+
+            try {
+                await apiRequest('/message/forward', {
+                    method: 'POST',
+                    body: {
+                        to: targetJid,
+                        message: message
+                    }
+                });
+
+                showNotification('Message forwarded!', 'success');
+            } catch (error) {
+                showNotification('Failed to forward message', 'error');
+            }
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file || !currentChat) return;
+
+            const maxSize = 50 * 1024 * 1024; // 50MB
+            if (file.size > maxSize) {
+                showNotification('File too large. Maximum size is 50MB.', 'error');
+                return;
+            }
+
+            try {
+                showNotification('Uploading file...', 'info');
+                
+                // Create FormData for file upload
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // For demo purposes, we'll use a placeholder URL
+                // In a real implementation, you'd upload to your file server
+                const fileUrl = URL.createObjectURL(file);
+                
+                // Determine message type based on file type
+                let messageType = 'document';
+                if (file.type.startsWith('image/')) messageType = 'image';
+                else if (file.type.startsWith('video/')) messageType = 'video';
+                else if (file.type.startsWith('audio/')) messageType = 'audio';
+
+                await apiRequest('/message/send', {
+                    method: 'POST',
+                    body: {
+                        jid: currentChat.id,
+                        type: messageType,
+                        content: fileUrl,
+                        options: {
+                            fileName: file.name
+                        }
+                    }
+                });
+
+                addMessageToChat({
+                    content: fileUrl,
+                    type: messageType,
+                    fromMe: true,
+                    timestamp: new Date(),
+                    id: Date.now()
+                });
+
+                showNotification('File sent!', 'success');
+                
+            } catch (error) {
+                showNotification('Failed to send file', 'error');
+            }
+            
+            // Reset file input
+            event.target.value = '';
+        }
+
+        function showSendMessageModal() {
+            document.getElementById('sendMessageModal').classList.add('show');
+        }
+
+        async function sendCustomMessage() {
+            const jid = document.getElementById('sendJid').value.trim();
+            const type = document.getElementById('sendType').value;
+            const content = document.getElementById('sendContent').value.trim();
+
+            if (!jid || !content) {
+                showNotification('Please fill in all fields', 'error');
+                return;
+            }
+
+            try {
+                await apiRequest('/message/send', {
+                    method: 'POST',
+                    body: {
+                        jid: jid,
+                        type: type,
+                        content: content
+                    }
+                });
+
+                closeModal('sendMessageModal');
+                showNotification('Message sent successfully!', 'success');
+                
+                // Clear form
+                document.getElementById('sendJid').value = '';
+                document.getElementById('sendContent').value = '';
+                
+            } catch (error) {
+                showNotification('Failed to send message', 'error');
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + Enter to send message
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                sendMessage();
+            }
+            
+            // Escape to close modals
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal.show').forEach(modal => {
+                    modal.classList.remove('show');
+                });
+                document.getElementById('emojiPicker').style.display = 'none';
+            }
+            
+            // Ctrl/Cmd + N for new message
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                showSendMessageModal();
+            }
+        });
+
+        // Auto-scroll messages
+        function scrollToBottom() {
+            const container = document.getElementById('messagesContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Format JID helper
+        function formatJid(phone) {
+            // Remove any non-digit characters except +
+            const cleaned = phone.replace(/[^\d+]/g, '');
+            
+            // Add @s.whatsapp.net if not present
+            if (!phone.includes('@')) {
+                return cleaned + '@s.whatsapp.net';
+            }
+            
+            return phone;
+        }
+
+        // Add contact helper
+        function addNewChat() {
+            const phone = prompt('Enter phone number (with country code, e.g., +1234567890):');
+            if (!phone) return;
+            
+            const jid = formatJid(phone);
+            const name = phone.replace(/[^\d]/g, '');
+            
+            // Add to chat list
+            chats.push({
+                id: jid,
+                name: name,
+                lastMessage: 'No messages yet'
+            });
+            
+            renderChats();
+            selectChat(jid, name);
+            showNotification('Chat added! You can now send messages.', 'success');
+        }
+
+        // Connection status checker
+        function checkConnection() {
+            if (!isAuthenticated && currentSession) {
+                showNotification('Connection lost. Please reconnect.', 'error');
+                updateStatus('Disconnected', false);
+                showAuthScreen();
+            }
+        }
+
+        // Periodic connection check
+        setInterval(checkConnection, 30000); // Check every 30 seconds

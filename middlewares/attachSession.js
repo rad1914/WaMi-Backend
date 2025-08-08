@@ -1,11 +1,13 @@
-// @path: middlewares/attachSession.js
-import { extractSock } from '../utils/session.js';
+import { getSession } from '../client/session.manager.js';
 
 export function attachSession(req, res, next) {
+  const id = req.headers['x-session-id'] || req.body?.sessionId || req.query?.sessionId;
+  if (!id) return res.status(400).json({ error: 'sessionId is required' });
+
   try {
-    req.sock = extractSock(req);
+    req.sock = getSession(id);
     next();
-  } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+  } catch {
+    res.status(401).json({ error: 'Invalid sessionId' });
   }
 }

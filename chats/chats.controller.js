@@ -1,11 +1,18 @@
-// @path: chats/chats.controller.js
-import * as service from './chats.service.js';
 import { wrapController } from '../utils/utils.js';
+import { store } from '../client/store.js';
 
-export const getAllChats = wrapController(async (_input, req) =>
-  service.getAllChats(req.sock)
-);
+export const getChatsHandler = wrapController(async ({ jid }, req) => {
+  const chats = req.sock.store?.chats ?? store.chats;
 
-export const getChatByJid = wrapController(async ({ jid }, req) =>
-  service.getChatByJid(req.sock, jid)
-);
+  if (jid) {
+    const chat = chats.get(jid);
+    if (!chat) {
+      const err = new Error('Chat not found');
+      err.status = 404;
+      throw err;
+    }
+    return chat;
+  }
+
+  return chats.all?.() ?? [];
+});

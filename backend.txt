@@ -194,8 +194,8 @@ import path from 'path';
 
 export const deleteEmptyDirs = dir => {
   if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) deleteEmptyDirs(path.join(dir, entry.name));
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) deleteEmptyDirs(path.join(dir, e.name));
   }
   const files = fs.readdirSync(dir);
   if (files.length === 0 || (files.length === 1 && files[0] === 'creds.json')) {
@@ -204,20 +204,38 @@ export const deleteEmptyDirs = dir => {
 };
 
 const pendingQRs = new Map();
+const retryCounts = new Map();
+const MAX_RETRIES = 5;
 
 export const getPendingQR = id => pendingQRs.get(id) ?? null;
 
 export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) pendingQRs.set(id, qr);
+    if (connection === 'open') return retryCounts.delete(id);
     if (connection !== 'close') return;
 
     const err = lastDisconnect?.error;
-    const reconnect =
-      !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
+    const reconnect = !err || (err instanceof Boom && err.output?.statusCode !== DisconnectReason.loggedOut);
 
     try { await saveCreds(); } catch {}
-    if (reconnect) try { await reinit?.(id); } catch {}
+
+    const retries = (retryCounts.get(id) ?? 0) + 1;
+    retryCounts.set(id, retries);
+
+    if (retries > MAX_RETRIES) {
+      try {
+        const { deleteSession } = await import('../client/session.manager.js');
+        await deleteSession(id);
+      } catch {}
+      retryCounts.delete(id);
+      pendingQRs.delete(id);
+      return;
+    }
+
+    if (reconnect) {
+      try { await reinit?.(id); } catch {}
+    }
   });
 };
 // @path: utils/logger.js
