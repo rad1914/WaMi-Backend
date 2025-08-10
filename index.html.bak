@@ -85,7 +85,7 @@
         <select id="typeSelect">
           <option value="text">text</option>
           <option value="image">image</option>
-          <option value="video">video</option>
+          <option value="video">video</n          </option>
           <option value="audio">audio</option>
           <option value="document">document</option>
           <option value="sticker">sticker</option>
@@ -132,7 +132,7 @@
 
     // --- helpers ---
     function api(path, opts = {}){
-      const headers = Object.assign({}, opts.headers || {});
+      const headers = opts.headers || {};
       if (state.sessionId) headers['x-session-id'] = state.sessionId;
       return fetch(API_ROOT + path, {...opts, headers}).then(async r => {
         const txt = await r.text();
@@ -177,6 +177,7 @@
       try{
         const qrRes = await api('/auth/qr?sessionId=' + encodeURIComponent(state.sessionId));
         if (qrRes?.qr){
+          // render QR using qrcode lib
           const qrEl = document.getElementById('qrContainer');
           qrEl.innerHTML = '';
           const canvas = document.createElement('canvas');
@@ -211,6 +212,7 @@
 
       socket.on('whatsapp-message-status', ({ sessionId, updates }) => {
         if (sessionId !== state.sessionId) return;
+        // naive: attach updates to local messages by id
         updates.forEach(u => {
           const msg = state.messages.find(m => m.key && m.key.id === u.key?.id);
           if (msg) Object.assign(msg, u);
@@ -245,19 +247,18 @@
       state.selectedChat = chat; state.selectedMessage = null;
       document.getElementById('chatTitle').textContent = chat.name || chat.id;
       document.getElementById('toJid').value = chat.id;
-
-      // NEW: load message history from backend endpoint
-      try {
-        const msgs = await api('/chats/' + encodeURIComponent(chat.id) + '/messages');
-        state.messages = Array.isArray(msgs) ? msgs : [];
-      } catch (err) {
-        console.warn('failed loading chat messages', err);
+      // try to load messages from backend store via /chats/:jid
+      try{
+        const chatDetail = await api('/chats/' + encodeURIComponent(chat.id));
+        // chatDetail may be a chat object; messages are stored in sock.store.messages - not exposed via API, so rely on realtime events
+        // We show chat metadata and clear message pane; realtime events will populate messages
         state.messages = [];
-      }
-      renderMessages();
+        renderMessages();
+      }catch(e){ console.warn(e); }
     }
 
     function addOrUpdateMessage(message){
+      // normalize: message.key.id
       const id = message?.key?.id;
       if (!id) return;
       const idx = state.messages.findIndex(m => m.key?.id === id);
@@ -273,6 +274,7 @@
         const wrapper = document.createElement('div'); wrapper.className = 'message ' + ((msg.key?.fromMe) ? 'from-me' : 'from-other');
         const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = acct + ' — ' + (msg.key?.id || '');
         const body = document.createElement('div');
+        // simple text/image/document handling
         const payload = msg.message;
         if (!payload) body.textContent = JSON.stringify(msg, null, 2);
         else if (payload.conversation) body.textContent = payload.conversation;
@@ -280,7 +282,7 @@
           const img = document.createElement('img'); img.src = payload.image.url || payload.image; img.className = 'file-preview'; body.appendChild(img); if (payload.image.caption) body.append(payload.image.caption);
         } else if (payload.video) { const v = document.createElement('video'); v.src = payload.video.url || payload.video; v.controls = true; v.className='file-preview'; body.appendChild(v); }
         else if (payload.document) { const a=document.createElement('a'); a.href=payload.document.url; a.target='_blank'; a.textContent = payload.document.fileName || 'document'; body.appendChild(a); }
-        else if (payload.sticker) { const img=document.createElement('img'); img.src=payload.sticker.url || payload.sticker; img.className='file-preview'; body.appendChild(img);}
+        else if (payload.sticker) { const img=document.createElement('img'); img.src=payload.sticker.url || payload.sticker; img.className='file-preview'; body.appendChild(img);} 
         else if (payload.text) body.textContent = payload.text;
         else body.textContent = JSON.stringify(payload);
 
@@ -305,6 +307,7 @@
       const type = document.getElementById('typeSelect').value;
       if (!jid || !content) return alert('to and content required');
       const body = { jid, type, content };
+      // document needs options.fileName maybe
       try{
         const res = await api('/message/send', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
         console.log('send res', res);

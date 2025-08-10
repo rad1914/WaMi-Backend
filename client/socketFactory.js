@@ -2,6 +2,7 @@
 import { makeWASocket, fetchLatestBaileysVersion, Browsers } from '@whiskeysockets/baileys';
 import { registerSocketEvents } from '../utils/helpers.js';
 import { store, saveStore } from './store.js';
+import { io } from '../index.js';
 
 let cachedVersion;
 const getBaileysVersion = async () =>
@@ -28,6 +29,24 @@ export async function createSocket({ authState, sessionId, browserName, reinit }
 
   ['creds.update', 'chats.set', 'chats.upsert', 'chats.update']
     .forEach(event => sock.ev.on(event, () => saveStore(store)));
+
+  sock.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type === 'notify') {
+      messages.forEach(msg => {
+        io.emit('whatsapp-message', {
+          sessionId,
+          message: msg
+        });
+      });
+    }
+  });
+
+  sock.ev.on('messages.update', updates => {
+    io.emit('whatsapp-message-status', {
+      sessionId,
+      updates
+    });
+  });
 
   return sock;
 }

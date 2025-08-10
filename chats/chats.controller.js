@@ -17,3 +17,22 @@ export const getChatsHandler = wrapController(async ({ jid }, req) => {
 
   return chats.all?.() ?? [];
 });
+
+// get messages for a specific chat
+export const getChatMessagesHandler = wrapController(async (params, req) => {
+  const { jid } = params;
+  if (!jid) {
+    const err = new Error('jid is required');
+    err.status = 400;
+    throw err;
+  }
+
+  // use the session-bound store if available, otherwise fall back to the global store
+  const messagesStore = req.sock.store?.messages ?? store.messages;
+  const allMessages = messagesStore.all?.() ?? [];
+
+  // filter messages by remoteJid (this is how messages are keyed in the store)
+  const chatMessages = allMessages.filter(m => m.key?.remoteJid === jid);
+
+  return chatMessages;
+}, { input: req => req.params });
