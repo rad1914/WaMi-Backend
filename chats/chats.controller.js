@@ -1,3 +1,4 @@
+// @path: chats/chats.controller.js
 import { wrapController } from '../utils/utils.js';
 import { store } from '../client/store.js';
 

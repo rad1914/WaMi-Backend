@@ -1,3 +1,4 @@
+// @path: chats/chats.routes.js
 import { Router } from 'express';
 import { attachSession } from '../middlewares/attachSession.js';
 import { getChatsHandler } from './chats.controller.js';

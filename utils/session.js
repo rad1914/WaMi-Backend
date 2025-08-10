@@ -1,3 +1,4 @@
+// @path: utils/session.js
 import path from 'path';
 import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { SESSION_BASE_DIR } from '../config/config.js';

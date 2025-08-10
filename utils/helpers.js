@@ -1,3 +1,4 @@
+// @path: utils/helpers.js
 import { Boom } from '@hapi/boom';
 import { DisconnectReason } from '@whiskeysockets/baileys';
 import fs from 'fs';
@@ -25,7 +26,6 @@ export const registerSocketEvents = (sock, id, saveCreds, reinit) => {
     const retries = (retryCounts.get(id) ?? 0) + 1;
     retryCounts.set(id, retries);
 
-    // 🔍 Check for specific "Connection Failure" message
     const isConnectionFailure = err?.message?.includes?.('Connection Failure');
 
     if (retries > MAX_RETRIES || isConnectionFailure) {

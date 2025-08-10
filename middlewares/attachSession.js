@@ -1,3 +1,4 @@
+// @path: middlewares/attachSession.js
 import { getSession } from '../client/session.manager.js';
 
 export function attachSession(req, res, next) {

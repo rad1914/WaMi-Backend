@@ -1,3 +1,4 @@
+// @path: message/message.controller.js
 import * as svc from './message.service.js';
 import { wrapController } from '../utils/utils.js';
 
