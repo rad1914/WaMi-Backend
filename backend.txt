@@ -456,11 +456,13 @@ export const STORE_FILE        = path.join(SESSION_BASE_DIR, 'store.json');
 // @path: chats/chats.routes.js
 import { Router } from 'express';
 import { attachSession } from '../middlewares/attachSession.js';
-import { getChatsHandler } from './chats.controller.js';
+import { getChatsHandler, getChatMessagesHandler } from './chats.controller.js';
 
 const router = Router();
 
 router.use(attachSession);
+
+router.get('/:jid/messages', getChatMessagesHandler);
 
 router.get('/', getChatsHandler);
 router.get('/:jid', getChatsHandler);
@@ -485,6 +487,22 @@ export const getChatsHandler = wrapController(async ({ jid }, req) => {
 
   return chats.all?.() ?? [];
 });
+
+export const getChatMessagesHandler = wrapController(async (params, req) => {
+  const { jid } = params;
+  if (!jid) {
+    const err = new Error('jid is required');
+    err.status = 400;
+    throw err;
+  }
+
+  const messagesStore = req.sock.store?.messages ?? store.messages;
+  const allMessages = messagesStore.all?.() ?? [];
+
+  const chatMessages = allMessages.filter(m => m.key?.remoteJid === jid);
+
+  return chatMessages;
+}, { input: req => req.params });
 // @path: chats/chats.service.js
 import { store, saveStore } from '../client/store.js';
 

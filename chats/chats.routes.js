@@ -7,7 +7,6 @@ const router = Router();
 
 router.use(attachSession);
 
-// IMPORTANT: put the more specific route first so "messages" doesn't get treated as a jid
 router.get('/:jid/messages', getChatMessagesHandler);
 
 router.get('/', getChatsHandler);
